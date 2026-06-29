@@ -210,7 +210,7 @@
     .sidebar{position:fixed;right:-230px;width:220px;transition:right .25s;z-index:200}
     .sidebar.mobile-open{right:0}
     .main{margin-right:0;max-width:100%;padding:1rem .75rem 4rem}
-    .hamburger{display:flex}
+    .hamburger{display:flex!important}
     .sidebar-overlay.visible{display:block}
     .charts-row,.ts-grid,.import-grid{grid-template-columns:1fr}
     .fg{grid-template-columns:1fr 1fr}
@@ -239,9 +239,15 @@
     .row-btns{justify-content:stretch}
     .row-btns .btn{flex:1}
   }
-  .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px 10px;position:fixed;top:10px;right:10px;z-index:300;background:var(--dc-black);border-radius:8px;border:1px solid var(--dc-green)}
-  .hamburger span{width:22px;height:2px;background:var(--dc-green);border-radius:2px;display:block}
+  .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:10px 12px;position:fixed;top:8px;right:8px;z-index:300;background:var(--dc-black);border-radius:10px;border:2px solid var(--dc-green);box-shadow:0 2px 12px rgba(0,0,0,.4)}
+  .hamburger span{width:24px;height:2.5px;background:var(--dc-green);border-radius:2px;display:block}
   .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150}
+  /* Mobile bottom nav bar */
+  .mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--dc-black);border-top:2px solid var(--dc-green);z-index:299;padding:6px 4px 8px;gap:0}
+  .mob-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:#aaa;font-size:9px;font-family:inherit;cursor:pointer;padding:4px 2px;border-radius:6px;-webkit-tap-highlight-color:transparent;font-weight:600;letter-spacing:.3px;text-transform:uppercase}
+  .mob-nav-btn.on{color:var(--dc-green)}
+  .mob-nav-btn span:first-child{font-size:18px;line-height:1}
+  @media(max-width:768px){.mob-nav{display:flex}.main{padding-bottom:80px!important}}
   .theme-btn{width:100%;padding:7px 10px;font-size:12px;border:1px solid #333;border-radius:var(--radius);background:transparent;color:#aaa;cursor:pointer;font-family:inherit;text-align:left;margin-top:.3rem;transition:all .15s}
   .theme-btn:hover{background:var(--dc-dark3);color:white}
   .squad-search{width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:var(--radius);font-size:13px;font-family:inherit;background:var(--surface);color:var(--text);outline:none;margin-bottom:.7rem}
@@ -294,6 +300,13 @@
 <body>
 <div class="hamburger" id="hamburger" onclick="openSidebar()"><span></span><span></span><span></span></div>
 <div class="sidebar-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<div class="mob-nav" id="mob-nav">
+  <button class="mob-nav-btn on" id="mbn-overview" onclick="mobNav('overview',this)"><span>🏠</span><span>Home</span></button>
+  <button class="mob-nav-btn" id="mbn-match" onclick="mobNav('match',this)"><span>⚽</span><span>Log Match</span></button>
+  <button class="mob-nav-btn" id="mbn-players" onclick="mobNav('players',this)"><span>👥</span><span>Players</span></button>
+  <button class="mob-nav-btn" id="mbn-pmreport" onclick="mobNav('pmreport',this)"><span>📋</span><span>Report</span></button>
+  <button class="mob-nav-btn" id="mbn-more" onclick="openSidebar()"><span>☰</span><span>More</span></button>
+</div>
 <div class="shell">
 
 <!-- SIDEBAR -->
@@ -1113,6 +1126,33 @@ function closeSidebar(){
   document.getElementById('sidebar').classList.remove('mobile-open');
   document.getElementById('sb-overlay').classList.remove('visible');
 }
+const MOB_NAV_IDS=['overview','match','players','pmreport'];
+function syncMobNav(id){
+  MOB_NAV_IDS.forEach(n=>{
+    const b=document.getElementById('mbn-'+n);
+    if(b) b.classList.toggle('on', n===id);
+  });
+  const moreBtn=document.getElementById('mbn-more');
+  if(moreBtn) moreBtn.classList.toggle('on', !MOB_NAV_IDS.includes(id));
+}
+function mobNav(id,btn){
+  // find the matching sidebar ntab and delegate to nav()
+  const ntabs=document.querySelectorAll('.ntab');
+  let matched=null;
+  ntabs.forEach(t=>{
+    const oc=t.getAttribute('onclick')||'';
+    if(oc.includes("nav('"+id+"'")){matched=t;}
+  });
+  if(matched) nav(id,matched);
+  else{
+    // fallback: just switch page
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+    const pg=document.getElementById('pg-'+id);
+    if(pg) pg.classList.add('on');
+  }
+  syncMobNav(id);
+  closeSidebar();
+}
 
 /* ── DARK / LIGHT MODE ── */
 function toggleTheme(){
@@ -1403,6 +1443,7 @@ function nav(id,btn){
   document.getElementById('pg-'+id).classList.add('on');
   btn.classList.add('on');
   closeSidebar();
+  syncMobNav(id);
   if(id==='overview')renderOverview();
   if(id==='players'){renderPlayers();updateBackupLabel();}
   if(id==='report')renderReport();
