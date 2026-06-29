@@ -279,7 +279,12 @@
     .page{display:none!important}body{background:white}
     .card,.ma-card{box-shadow:none;border:1px solid #ccc;break-inside:avoid}
     .pitch{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    #pg-matchprint.on,#pg-seasonprint.on,#pg-training.on,#pg-statsreport.on,#pg-fixtures.on,#pg-compare.on,#pg-tactics.on{display:block!important}
+    #pg-matchprint.on,#pg-seasonprint.on,#pg-training.on,#pg-statsreport.on,#pg-fixtures.on,#pg-compare.on,#pg-tactics.on,#pg-pmreport.on{display:block!important}
+    #pg-pmreport.on .pmr-form-section{display:none!important}
+    #pg-pmreport.on #pmr-slides{display:block!important}
+    .pmr-slide{page-break-after:always;page-break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .pmr-slide:last-child{page-break-after:avoid}
+    @page{size:A4 landscape;margin:0}
     .profile-overlay.open{position:static!important;display:block!important;background:#fff!important;padding:0!important;z-index:auto!important}
     .profile-overlay.open .profile-modal{max-width:100%!important;max-height:none!important;overflow:visible!important;box-shadow:none!important}
     .profile-close{display:none!important}
@@ -319,6 +324,7 @@
     <button class="ntab" onclick="nav('training',this)"><span>&#9678;</span> Training</button>
     <div class="sb-div"></div>
     <div class="sb-sec">Reports</div>
+    <button class="ntab" onclick="nav('pmreport',this)"><span>📋</span> Post-Match Report</button>
     <button class="ntab" onclick="nav('report',this)"><span>&#9632;</span> Season Report</button>
     <button class="ntab" onclick="nav('matchprint',this)"><span>&#9632;</span> Match Sheet</button>
     <button class="ntab" onclick="nav('seasonprint',this)"><span>&#9654;</span> Season Sheet</button>
@@ -353,6 +359,10 @@
     <div class="card-title"><span class="icon">&#9679;</span> Home &amp; Away breakdown</div>
     <div id="ov-ha-content"></div>
   </div>
+  <div class="card" id="ov-cup-card" style="display:none">
+    <div class="card-title"><span class="icon">&#127942;</span> Cup &amp; Other Competitions</div>
+    <div id="ov-cup-content"></div>
+  </div>
 </div>
 
 <!-- LOG MATCH -->
@@ -369,7 +379,7 @@
     </div>
     <div class="sec-lbl">Score</div>
     <div class="fg3">
-      <div class="field"><label>DC goals</label><input type="number" id="m-gf" min="0" value="0"></div>
+      <div class="field"><label>KU goals</label><input type="number" id="m-gf" min="0" value="0"></div>
       <div class="field"><label>Opponent goals</label><input type="number" id="m-ga" min="0" value="0"></div>
     </div>
     <div class="sec-lbl">Attacking</div>
@@ -840,6 +850,95 @@
   <div id="tb-bench"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text3);margin-bottom:.3rem">Bench &mdash; drag onto pitch, or drag a player off the pitch to return them here</div><div id="tb-bench-row"></div></div>
 </div>
 
+<!-- POST-MATCH REPORT -->
+<div id="pg-pmreport" class="page">
+  <div class="top-banner no-print"><img class="banner-logo" id="bl-pmr" src=""><div><div class="tb-title">Post-Match Report</div><div class="tb-sub">AI-powered tactical analysis &amp; report generation</div></div><div style="margin-left:auto"><button class="btn btn-sm no-print" style="border-color:var(--dc-green);color:var(--dc-green)" onclick="document.getElementById('pmr-api-card').style.display=document.getElementById('pmr-api-card').style.display==='none'?'block':'none'">⚙ API Key</button></div></div>
+  <div class="accent-bar no-print"></div>
+
+  <!-- API key card -->
+  <div class="card no-print pmr-form-section" id="pmr-api-card" style="display:none">
+    <div class="card-title"><span class="icon">🔑</span> Gemini API Key</div>
+    <div class="fg">
+      <div class="field"><label>Paste your Gemini API key (saved locally, never sent anywhere except Google)</label>
+        <input type="password" id="pmr-apikey" placeholder="AIza...">
+      </div>
+    </div>
+    <div class="row-btns"><button class="btn btn-primary" onclick="pmrSaveKey()">✓ Save Key</button><button class="btn" onclick="pmrCheckKey()" style="margin-left:8px">🔍 Check API Key</button><span id="pmr-key-msg" style="font-size:12px;color:var(--dc-green-dark);margin-left:8px"></span></div>
+    <div id="pmr-key-diag" style="font-size:12px;margin-top:6px;display:none;background:#f5f5f5;padding:8px;border-radius:4px;word-break:break-all;max-height:120px;overflow-y:auto"></div>
+  </div>
+
+  <!-- Match selector -->
+  <div class="card no-print pmr-form-section">
+    <div class="card-title"><span class="icon">⚽</span> Select Match</div>
+    <div class="fg">
+      <div class="field"><label>Match</label><select id="pmr-match-sel" onchange="pmrLoadMatch()"><option value="">— Select a logged match —</option></select></div>
+      <div class="field"><label>Big Chances Created</label><input type="number" id="pmr-bc" min="0" value="0"></div>
+    </div>
+    <div class="fg">
+      <div class="field"><label>Milestone / Achievement (optional)</label><input id="pmr-milestone" placeholder="e.g. 6th Consecutive Clean Sheet"></div>
+      <div class="field"><label>Stats footnote (auto-generated if blank)</label><input id="pmr-footer" placeholder="Leave blank for auto"></div>
+    </div>
+    <div id="pmr-match-preview" style="display:none;background:var(--surface2);border-radius:var(--radius);padding:.8rem 1rem;font-size:13px;color:var(--text2);margin-top:.4rem"></div>
+  </div>
+
+  <!-- Raw notes + AI -->
+  <div class="card no-print pmr-form-section">
+    <div class="card-title"><span class="icon">✍</span> Raw Analyst Notes</div>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:.7rem">Dump everything here — rough, shorthand, bullet points, observations. The AI will interpret and expand into analytical match report language.</p>
+    <div class="field"><textarea id="pmr-rawnotes" style="min-height:130px" placeholder="e.g. we pressed high first 20 mins, ngoma 1v1 keeper missed, dropped off second half let them breathe, babadi good impact but stupid red card, nyoni too isolated, not enough runners in box on crosses, jaure cross was world class, 6th clean sheet..."></textarea></div>
+    <div class="row-btns">
+      <button class="btn btn-dark" onclick="pmrFleshWithAI()" id="pmr-ai-btn" style="background:var(--dc-black);color:var(--dc-green);font-weight:700;font-size:14px;padding:10px 24px">✨ Flesh Out with AI</button>
+      <span id="pmr-ai-status" style="font-size:12px;color:var(--text3)"></span>
+    </div>
+  </div>
+
+  <!-- AI-generated editable sections -->
+  <div id="pmr-ai-fields" style="display:none">
+    <div class="card no-print pmr-form-section">
+      <div class="card-title"><span class="icon">📝</span> Match Narrative <span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:8px">AI-generated — edit freely</span></div>
+      <div class="fg">
+        <div class="field"><label>First Half — bullets (one per line)</label><textarea id="pmr-h1" style="min-height:100px"></textarea></div>
+        <div class="field"><label>Second Half — bullets (one per line)</label><textarea id="pmr-h2" style="min-height:100px"></textarea></div>
+      </div>
+    </div>
+    <div class="card no-print pmr-form-section">
+      <div class="card-title"><span class="icon">🔍</span> Performance Analysis</div>
+      <div class="fg">
+        <div class="field"><label>Analysis Headline</label><input id="pmr-hl-title" placeholder="e.g. THE EFFICIENCY GAP"></div>
+        <div class="field"><label>Headline Description</label><input id="pmr-hl-desc"></div>
+      </div>
+      <div class="fg">
+        <div class="field"><label>✅ Positives (one per line)</label><textarea id="pmr-pos" style="min-height:110px"></textarea></div>
+        <div class="field"><label>❌ Areas to Improve (one per line)</label><textarea id="pmr-neg" style="min-height:110px"></textarea></div>
+      </div>
+    </div>
+    <div class="card no-print pmr-form-section">
+      <div class="card-title"><span class="icon">💡</span> Recommendations</div>
+      <div id="pmr-recs-wrap"></div>
+    </div>
+    <div class="card no-print pmr-form-section">
+      <div class="card-title"><span class="icon">🔄</span> Substitutions Detail</div>
+      <div id="pmr-subs-wrap"></div>
+      <div class="field" style="margin-top:.6rem"><label>Substitution highlight note</label><input id="pmr-sub-note"></div>
+    </div>
+    <div class="row-btns no-print pmr-form-section" style="margin-bottom:1rem">
+      <button class="btn btn-dark" style="font-size:15px;padding:12px 28px;background:var(--dc-black);color:var(--dc-green);font-weight:800" onclick="pmrGenerate()">⚡ GENERATE REPORT</button>
+    </div>
+  </div>
+
+  <!-- SLIDES (hidden until generated, visible on print) -->
+  <div id="pmr-slides" style="display:none">
+    <div class="row-btns no-print" style="margin-bottom:.6rem;gap:6px">
+      <button class="btn" onclick="pmrBackToForm()" style="border-color:var(--border)">← Edit</button>
+      <button class="btn btn-dark" onclick="window.print()" style="background:var(--dc-black);color:var(--dc-green);font-weight:700">🖨 Print / Save as PDF</button>
+      <span class="no-print" style="font-size:11px;color:var(--text3)">Tip: Set browser print to Landscape, Scale: Fit to page</span>
+    </div>
+    <div class="pmr-land-hint no-print">📱 Rotate to landscape for best viewing — or swipe slides below</div>
+    <div id="pmr-slides-inner"></div>
+    <div id="pmr-mob-ctrl" class="pmr-mob-ctrl no-print"></div>
+  </div>
+</div>
+
 </main>
 </div>
 
@@ -881,7 +980,7 @@
     </div>
     <div class="sec-lbl">Score</div>
     <div class="fg3">
-      <div class="field"><label>DC goals</label><input type="number" id="e-gf" min="0"></div>
+      <div class="field"><label>KU goals</label><input type="number" id="e-gf" min="0"></div>
       <div class="field"><label>Opponent goals</label><input type="number" id="e-ga" min="0"></div>
     </div>
     <div class="sec-lbl">Attacking</div>
@@ -1002,7 +1101,7 @@ function persist(){localStorage.setItem(TK('matches'),JSON.stringify(matches));l
 function autoSnapshot(){try{const snap={savedAt:new Date().toISOString(),matches,players,training:(typeof training!=='undefined'?training:[])};localStorage.setItem(TK('autobackup'),JSON.stringify(snap));}catch(e){}}
 function restoreAutoSave(){const raw=localStorage.getItem(TK('autobackup'));const msg=document.getElementById('backup-msg');if(!raw){if(msg){msg.className='import-msg';msg.textContent='No auto-save found yet.';}return;}let d;try{d=JSON.parse(raw);}catch(e){return;}if(!confirm('Restore the auto-saved snapshot from '+(d.savedAt?new Date(d.savedAt).toLocaleString('en-GB'):'unknown')+'?\n\n'+(d.matches?d.matches.length:0)+' matches · '+(d.players?d.players.length:0)+' players\n\nThis replaces current data.'))return;matches=d.matches||[];players=d.players||[];if(d.training&&typeof training!=='undefined'){training=d.training;if(typeof persistTraining==='function')persistTraining();}persist();renderOverview();renderPlayers();if(typeof renderTraining==='function')renderTraining();if(msg){msg.className='import-msg ok';msg.textContent='✓ Restored auto-save ('+matches.length+' matches, '+players.length+' players).';}}
 function result(gf,ga){return gf>ga?'W':gf<ga?'L':'D';}
-function resBadge(r){return r==='W'?'<span class="badge bw">W</span>':r==='L'?'<span class="badge bl">L</span>':'<span class="badge by">D</span>';}
+function resBadge(r){return r==='W'?'<span class="badge bg">W</span>':r==='L'?'<span class="badge bl">L</span>':'<span class="badge by">D</span>';}
 function avg(arr,key){if(!arr.length)return'0';return(arr.reduce((a,m)=>a+(m[key]||0),0)/arr.length).toFixed(1);}
 
 /* ── MOBILE SIDEBAR ── */
@@ -1085,25 +1184,26 @@ function buildBackupReminder(){
 }
 function buildFormTable(){
   if(!matches.length)return'';
-  const W=matches.filter(m=>result(m.gf,m.ga)==='W').length;
-  const D=matches.filter(m=>result(m.gf,m.ga)==='D').length;
-  const L=matches.filter(m=>result(m.gf,m.ga)==='L').length;
-  const GF=matches.reduce((a,m)=>a+m.gf,0),GA=matches.reduce((a,m)=>a+m.ga,0);
+  const leagueMs=matches.filter(m=>!/cup|munhumutapa|friendly|charity|knockout/i.test(m.comp||''));
+  const W=leagueMs.filter(m=>result(m.gf,m.ga)==='W').length;
+  const D=leagueMs.filter(m=>result(m.gf,m.ga)==='D').length;
+  const L=leagueMs.filter(m=>result(m.gf,m.ga)==='L').length;
+  const GF=leagueMs.reduce((a,m)=>a+m.gf,0),GA=leagueMs.reduce((a,m)=>a+m.ga,0);
   const pts=W*3+D,diff=GF-GA;
-  const form=matches.slice(0,5).map(m=>result(m.gf,m.ga));
+  const form=leagueMs.slice(0,5).map(m=>result(m.gf,m.ga));
   const formDots=form.map(r=>`<span class="fd ${r==='W'?'fw':r==='L'?'fl':'ff'}">${r}</span>`).join('');
   const home=matches.filter(m=>m.venue==='Home'),away=matches.filter(m=>m.venue==='Away');
   const hW=home.filter(m=>result(m.gf,m.ga)==='W').length,hD=home.filter(m=>result(m.gf,m.ga)==='D').length,hL=home.filter(m=>result(m.gf,m.ga)==='L').length;
   const aW=away.filter(m=>result(m.gf,m.ga)==='W').length,aD=away.filter(m=>result(m.gf,m.ga)==='D').length,aL=away.filter(m=>result(m.gf,m.ga)==='L').length;
   const src=logoData||_L;
   return`<div class="card" style="margin-bottom:1rem">
-    <div class="card-title"><span class="icon">📊</span> Season Standing</div>
+    <div class="card-title"><span class="icon">📊</span> CRSL Season Standing</div>
     <div class="table-wrap">
       <table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th><th>Form</th></tr></thead>
       <tbody><tr style="background:var(--dc-green-light)">
         <td style="font-weight:700">1</td>
         <td><div style="display:flex;align-items:center;gap:8px"><img src="${src}" style="width:24px;height:24px;object-fit:contain;border-radius:50%;background:white;border:1px solid var(--dc-green)"><span style="font-weight:700">${teamName()}</span></div></td>
-        <td>${matches.length}</td>
+        <td>${leagueMs.length}</td>
         <td style="font-weight:700;color:#1a7f37">${W}</td>
         <td>${D}</td>
         <td style="color:var(--dc-red)">${L}</td>
@@ -1315,6 +1415,7 @@ function nav(id,btn){
   if(id==='tactics')tbOpen();
   if(id==='match')buildMatchSlots();
   if(id==='training')renderTraining();
+  if(id==='pmreport')initPMReport();
 }
 
 function toggleGK(){document.getElementById('gk-fields').style.display=document.getElementById('p-pos').value==='GK'?'block':'none';}
@@ -1506,9 +1607,24 @@ function savePlayer(){
   let idx=(editingPlayerIdx>=0&&editingPlayerIdx<players.length)?editingPlayerIdx:players.findIndex(x=>x.name.toLowerCase()===name.toLowerCase());
   if(idx>=0){
     const prev=players[idx];
+    const oldName=prev.name;
     // keep match-derived stats; only name/pos/shirt are user-editable here
     p.apps=prev.apps;p.goals=prev.goals;p.assists=prev.assists;p.yc=prev.yc;p.rc=prev.rc;p.cs=prev.cs;p.gc=prev.gc;p.mins=prev.mins;
     players[idx]=p;
+    // if name changed, update all match event references so recalc still works
+    if(oldName!==name){
+      matches.forEach(m=>{
+        const ts=m.teamsheet||{};
+        if(ts.starting)ts.starting=ts.starting.map(n=>n===oldName?name:n);
+        if(ts.subs)ts.subs=ts.subs.map(n=>n===oldName?name:n);
+        if(m.goals)m.goals.forEach(g=>{if(g.player===oldName)g.player=name;if(g.assist===oldName)g.assist=name;});
+        if(m.assistEvents)m.assistEvents.forEach(e=>{if(e.player===oldName)e.player=name;});
+        if(m.yellowCards)m.yellowCards.forEach(g=>{if(g.player===oldName)g.player=name;});
+        if(m.redCards)m.redCards.forEach(g=>{if(g.player===oldName)g.player=name;});
+        if(m.subs)m.subs.forEach(s=>{if(s.off===oldName)s.off=name;if(s.on===oldName)s.on=name;});
+        if(m.playerMins&&m.playerMins[oldName]!==undefined){m.playerMins[name]=m.playerMins[oldName];delete m.playerMins[oldName];}
+      });
+    }
   } else players.push(p);
   persist();renderPlayers();
   document.getElementById('player-msg').textContent=idx>=0?'Updated!':'Added!';
@@ -1522,40 +1638,46 @@ function deletePlayer(i){if(confirm('Remove '+players[i].name+'?')){players.spli
 /* ── PLAYER PROFILE ── */
 function showPlayerProfile(i){
   const p=players[i];
-  document.getElementById('prof-avatar').textContent=p.num||p.name.substring(0,2).toUpperCase();
-  document.getElementById('prof-name').textContent=p.name;
+  const nm=p.name;
+  // context-aware matcher: only fuzzy when name component is unique in squad
+  const nmatch=_mkMatcher(nm);
+
+  document.getElementById('prof-avatar').textContent=p.num||nm.substring(0,2).toUpperCase();
+  document.getElementById('prof-name').textContent=nm;
   document.getElementById('prof-pos').textContent=p.pos;
   document.getElementById('prof-shirt').textContent=p.num?'Shirt #'+p.num:'No shirt number';
 
-  // Collect match appearances
+  // Collect match appearances — fuzzy name match so Valentine/Tinotenda etc. are found
   const appeared=matches.filter(m=>{
     const ts=m.teamsheet||{};
-    return(ts.starting||[]).includes(p.name)||(ts.subs||[]).includes(p.name);
+    return(ts.starting||[]).some(nmatch)||(ts.subs||[]).some(nmatch);
   });
-  const goalsInMatches=matches.reduce((acc,m)=>{
-    return acc+(m.goals||[]).filter(g=>g.player===p.name).length;
-  },0);
-  const assistsInMatches=matches.reduce((acc,m)=>{
-    return acc+(m.goals||[]).filter(g=>g.assist===p.name).length
-              +(m.assistEvents||[]).filter(e=>e.player===p.name).length;
-  },0);
-  const ycInMatches=matches.reduce((acc,m)=>{
-    return acc+(m.yellowCards||[]).filter(g=>g.player===p.name).length;
-  },0);
-  const rcInMatches=matches.reduce((acc,m)=>{
-    return acc+(m.redCards||[]).filter(g=>g.player===p.name).length;
-  },0);
+  const goalsInMatches=matches.reduce((acc,m)=>acc+(m.goals||[]).filter(g=>nmatch(g.player)).length,0);
+  const assistsInMatches=matches.reduce((acc,m)=>
+    acc+(m.goals||[]).filter(g=>nmatch(g.assist)).length
+      +(m.assistEvents||[]).filter(e=>nmatch(e.player)).length,0);
+  const ycInMatches=matches.reduce((acc,m)=>acc+(m.yellowCards||[]).filter(g=>nmatch(g.player)).length,0);
+  const rcInMatches=matches.reduce((acc,m)=>acc+(m.redCards||[]).filter(g=>nmatch(g.player)).length,0);
   const csInMatches=p.pos==='GK'?matches.filter(m=>{
     const ts=m.teamsheet||{};
-    return m.cs==1&&(ts.starting||[]).slice(0,1).includes(p.name);
+    return m.cs==1&&(ts.starting||[]).slice(0,1).some(nmatch);
   }).length:null;
+  const gcInMatches=p.pos==='GK'?
+    matches.filter(m=>(m.teamsheet?.starting||[]).slice(0,1).some(nmatch)).reduce((a,m)=>a+(m.ga||0),0):null;
 
+  // Use stored stats (from recalc) but fall back to live counts if still 0
   const displayGoals=p.goals||goalsInMatches;
   const displayAssists=p.assists||assistsInMatches;
   const displayApps=p.apps||appeared.length;
-  const displayMins=p.mins||0;
+  const displayMins=p.mins||matches.reduce((a,m)=>{
+    const mm=matchMins(m);
+    const exact=mm[nm];if(exact!=null)return a+exact;
+    const fk=Object.keys(mm).find(k=>nmatch(k));return a+(fk?mm[fk]:0);
+  },0);
   const displayYC=p.yc||ycInMatches;
   const displayRC=p.rc||rcInMatches;
+  const displayCS=p.cs!=null?p.cs:(csInMatches||0);
+  const displayGC=p.gc!=null?p.gc:(gcInMatches||0);
 
   document.getElementById('prof-stats').innerHTML=`
     <div class="profile-stat"><div class="ps-val">${displayApps}</div><div class="ps-lbl">Appearances</div></div>
@@ -1567,34 +1689,58 @@ function showPlayerProfile(i){
 
   const gkHTML=p.pos==='GK'?`<div class="profile-section">Goalkeeper Stats</div>
     <div class="profile-stat-grid">
-      <div class="profile-stat"><div class="ps-val" style="color:var(--dc-green-dark)">${p.cs||csInMatches||0}</div><div class="ps-lbl">Clean Sheets</div></div>
-      <div class="profile-stat"><div class="ps-val" style="color:var(--dc-red)">${
-        // Calculate goals conceded directly from matches where GK started
-        matches.filter(m=>(m.teamsheet?.starting||[]).slice(0,1).includes(p.name)).reduce((a,m)=>a+(m.ga||0),0)
-      }</div><div class="ps-lbl">Goals Conceded</div></div>
+      <div class="profile-stat"><div class="ps-val" style="color:var(--dc-green-dark)">${displayCS}</div><div class="ps-lbl">Clean Sheets</div></div>
+      <div class="profile-stat"><div class="ps-val" style="color:var(--dc-red)">${displayGC}</div><div class="ps-lbl">Goals Conceded</div></div>
     </div>`:'';
   document.getElementById('prof-gk-stats').innerHTML=gkHTML;
 
-  // Match history — ALL games, no cap
+  // Match history with Assists, Cards columns
+  const isGK=p.pos==='GK';
   let matchHTML='';
   if(appeared.length){
+    const hdrs=isGK
+      ?`<tr><th>Date</th><th>vs</th><th>Venue</th><th>Score</th><th>Result</th><th>Mins</th><th>CS</th><th>GC</th></tr>`
+      :`<tr><th>Date</th><th>vs</th><th>Venue</th><th>Score</th><th>Result</th><th>Mins</th><th>⚽</th><th>🅰️</th><th>🟨</th><th>🟥</th></tr>`;
     matchHTML=`<div class="profile-section">All Appearances (${appeared.length})</div>
-    <div class="table-wrap"><table><thead><tr><th>GW</th><th>vs</th><th>Venue</th><th>Score</th><th>Result</th><th>Mins</th><th>Goals</th></tr></thead><tbody>`;
+    <div class="table-wrap"><table><thead>${hdrs}</thead><tbody>`;
     appeared.sort((a,b)=>_mkey(b)-_mkey(a));
     appeared.forEach(m=>{
       const r=result(m.gf,m.ga);
-      const playerGoals=(m.goals||[]).filter(g=>g.player===p.name).length;
-      const isStarter=(m.teamsheet?.starting||[]).includes(p.name);
-      const playerMins=(typeof matchMins==='function'?matchMins(m)[p.name]:0)||'—';
-      matchHTML+=`<tr>
-        <td style="color:var(--text3);font-size:11px">GW${m.week||'?'}</td>
-        <td style="font-weight:600">${m.opp}</td>
-        <td><span class="badge ${m.venue==='Home'?'bw':'bl'}">${m.venue}</span></td>
-        <td style="font-weight:700">${m.gf}–${m.ga}</td>
-        <td>${resBadge(r)}</td>
-        <td style="color:var(--text3)">${playerMins}</td>
-        <td>${playerGoals>0?'⚽'.repeat(Math.min(playerGoals,5))+(playerGoals>5?` ×${playerGoals}`:''):isStarter?'—':'<span style="font-size:10px;color:#aaa">Sub</span>'}</td>
-      </tr>`;
+      const isStarter=(m.teamsheet?.starting||[]).some(nmatch);
+      const mm=matchMins(m);
+      const exactMin=mm[nm];
+      const fk=exactMin==null?Object.keys(mm).find(k=>nmatch(k)):null;
+      const playerMins=exactMin!=null?exactMin:(fk?mm[fk]:'—');
+      const dt=m.date||('GW'+(m.week||'?'));
+      if(isGK){
+        const gkCS=m.cs==1&&isStarter?'✓':'—';
+        const gkGC=isStarter?(m.ga||0):'—';
+        matchHTML+=`<tr>
+          <td style="color:var(--text3);font-size:11px">${dt}</td>
+          <td style="font-weight:600">${_tesc(m.opp)}</td>
+          <td><span class="badge ${m.venue==='Home'?'bw':'bl'}">${m.venue}</span></td>
+          <td style="font-weight:700">${m.gf}–${m.ga}</td>
+          <td>${resBadge(r)}</td>
+          <td style="color:var(--text3)">${playerMins}</td>
+          <td style="color:var(--dc-green-dark);font-weight:700">${gkCS}</td>
+          <td style="color:var(--dc-red)">${gkGC}</td></tr>`;
+      } else {
+        const g=(m.goals||[]).filter(ev=>nmatch(ev.player)).length;
+        const a=(m.goals||[]).filter(ev=>nmatch(ev.assist)).length+(m.assistEvents||[]).filter(ev=>nmatch(ev.player)).length;
+        const yc=(m.yellowCards||[]).filter(ev=>nmatch(ev.player)).length;
+        const rc=(m.redCards||[]).filter(ev=>nmatch(ev.player)).length;
+        matchHTML+=`<tr>
+          <td style="color:var(--text3);font-size:11px">${dt}</td>
+          <td style="font-weight:600">${_tesc(m.opp)}</td>
+          <td><span class="badge ${m.venue==='Home'?'bw':'bl'}">${m.venue}</span></td>
+          <td style="font-weight:700">${m.gf}–${m.ga}</td>
+          <td>${resBadge(r)}</td>
+          <td style="color:var(--text3)">${playerMins}</td>
+          <td style="color:var(--dc-green-dark);font-weight:700">${g||'—'}</td>
+          <td>${a||'—'}</td>
+          <td style="color:#a07000">${yc||'—'}</td>
+          <td style="color:var(--dc-red)">${rc||'—'}</td></tr>`;
+      }
     });
     matchHTML+=`</tbody></table></div>`;
   }
@@ -1860,21 +2006,48 @@ function importPlayerNums(input){
 }
 
 /* ── RECALCULATE PLAYER STATS FROM ALL MATCH EVENTS ── */
+function _nameMatch(a,b){// simple exact case-insensitive match only
+  if(!a||!b)return false;
+  return a.trim().toLowerCase()===b.trim().toLowerCase();
+}
+// Context-aware matcher: fuzzy only if the matched component is UNIQUE in the squad
+// Avoids false positives when two players share a surname (e.g. Qassim Phiri vs Eriah Phiri)
+function _mkMatcher(playerName){
+  const pn=playerName.trim().toLowerCase();
+  const pw=pn.split(/\s+/);
+  const pFirst=pw[0],pLast=pw[pw.length-1];
+  // Only fuzzy-match on a name component if NO OTHER player shares it
+  const lastUnique=pLast.length>4&&
+    players.filter(p=>p.name.trim().toLowerCase().split(/\s+/).pop()===pLast).length===1;
+  const firstUnique=pFirst.length>4&&
+    players.filter(p=>p.name.trim().toLowerCase().split(/\s+/)[0]===pFirst).length===1;
+  return function(tsName){
+    if(!tsName)return false;
+    const tn=tsName.trim().toLowerCase();
+    if(tn===pn)return true;// exact
+    const tw=tn.split(/\s+/);
+    if(lastUnique&&tw[tw.length-1]===pLast)return true;// unique last name
+    if(firstUnique&&tw[0]===pFirst)return true;// unique first name
+    return false;
+  };
+}
 function recalcPlayerStats(silent){
   players.forEach(p=>{
     const name=p.name;
+    // context-aware matcher: only fuzzy when name component is unique in squad
+    const nm=_mkMatcher(name);
     // appearances: in starting XI or subs bench
     const appeared=matches.filter(m=>{
       const ts=m.teamsheet||{};
-      return(ts.starting||[]).includes(name)||(ts.subs||[]).includes(name);
+      return(ts.starting||[]).some(nm)||(ts.subs||[]).some(nm);
     });
     // Goals, cards counted from events (canonical names after import fix)
-    const goals=matches.reduce((a,m)=>a+(m.goals||[]).filter(g=>g.player===name).length,0);
-    const assists=matches.reduce((a,m)=>a+(m.goals||[]).filter(g=>g.assist===name).length+(m.assistEvents||[]).filter(e=>e.player===name).length,0);
-    const yc=matches.reduce((a,m)=>a+(m.yellowCards||[]).filter(g=>g.player===name).length,0);
-    const rc=matches.reduce((a,m)=>a+(m.redCards||[]).filter(g=>g.player===name).length,0);
-    // Minutes: exact lookup on canonical name (resolved during import)
-    const totalMins=matches.reduce((a,m)=>a+(matchMins(m)[name]||0),0);
+    const goals=matches.reduce((a,m)=>a+(m.goals||[]).filter(g=>nm(g.player)).length,0);
+    const assists=matches.reduce((a,m)=>a+(m.goals||[]).filter(g=>nm(g.assist)).length+(m.assistEvents||[]).filter(e=>nm(e.player)).length,0);
+    const yc=matches.reduce((a,m)=>a+(m.yellowCards||[]).filter(g=>nm(g.player)).length,0);
+    const rc=matches.reduce((a,m)=>a+(m.redCards||[]).filter(g=>nm(g.player)).length,0);
+    // Minutes: exact first, then fuzzy fallback
+    const totalMins=matches.reduce((a,m)=>{const mm=matchMins(m);const exact=mm[name];if(exact!=null)return a+exact;const fuzzyKey=Object.keys(mm).find(k=>nm(k));return a+(fuzzyKey?mm[fuzzyKey]:0);},0);
     // GK: count clean sheets AND goals conceded from matches where they started
     if(p.pos==='GK'){
       const gkMatches=matches.filter(m=>(m.teamsheet?.starting||[]).slice(0,1).includes(name));
@@ -1907,12 +2080,16 @@ function editPlayer(i){
 /* ── OVERVIEW ── */
 let gc,rc2,sc;
 function renderOverview(){
+  const leagueMs=matches.filter(m=>!/cup|munhumutapa|friendly|charity|knockout/i.test(m.comp||''));
+  const cupMs=matches.filter(m=>/cup|munhumutapa|friendly|charity|knockout/i.test(m.comp||''));
+  // W/D/L/GF/GA/CS from ALL games; Points from CRSL only
   const W=matches.filter(m=>result(m.gf,m.ga)==='W').length,D=matches.filter(m=>result(m.gf,m.ga)==='D').length,L=matches.filter(m=>result(m.gf,m.ga)==='L').length;
   const GF=matches.reduce((a,m)=>a+m.gf,0),GA=matches.reduce((a,m)=>a+m.ga,0),CS=matches.filter(m=>m.cs==1).length;
-  const pts=W*3+D,diff=GF-GA;
+  const lW=leagueMs.filter(m=>result(m.gf,m.ga)==='W').length,lD=leagueMs.filter(m=>result(m.gf,m.ga)==='D').length;
+  const pts=lW*3+lD,diff=GF-GA;
   document.getElementById('ov-metrics').innerHTML=`
     <div class="mc"><div class="ml">Matches</div><div class="mv">${matches.length}</div></div>
-    <div class="mc"><div class="ml">Points</div><div class="mv black">${pts}</div></div>
+    <div class="mc"><div class="ml">CRSL Points</div><div class="mv black">${pts}</div></div>
     <div class="mc"><div class="ml">Wins</div><div class="mv" style="color:#1a7f37">${W}</div></div>
     <div class="mc"><div class="ml">Draws</div><div class="mv">${D}</div></div>
     <div class="mc"><div class="ml">Losses</div><div class="mv red">${L}</div></div>
@@ -1949,6 +2126,18 @@ function renderOverview(){
     document.getElementById('ov-ha-content').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Venue</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>CS</th></tr></thead><tbody>${haRow('Home',home,'bw')}${haRow('Away',away,'bl')}${haRow('Neutral',neutral,'by')}</tbody></table></div>`;
   } else {
     document.getElementById('ov-ha-card').style.display='none';
+  }
+  // Cup log
+  const cupCard=document.getElementById('ov-cup-card');
+  if(cupMs.length){
+    cupCard.style.display='';
+    const cupW=cupMs.filter(m=>result(m.gf,m.ga)==='W').length;
+    const cupD=cupMs.filter(m=>result(m.gf,m.ga)==='D').length;
+    const cupL=cupMs.filter(m=>result(m.gf,m.ga)==='L').length;
+    const cupRows=cupMs.sort((a,b)=>new Date(a.date||0)-new Date(b.date||0)).map(m=>`<tr><td style="color:var(--text3)">${m.date||'—'}</td><td style="font-weight:600;color:var(--dc-green-dark)">${m.comp}</td><td style="font-weight:600">${m.opp}</td><td><span class="badge ${m.venue==='Home'?'bw':m.venue==='Away'?'bl':'by'}">${m.venue}</span></td><td style="font-weight:700">${m.gf}–${m.ga}</td><td>${resBadge(result(m.gf,m.ga))}</td></tr>`).join('');
+    document.getElementById('ov-cup-content').innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:.8rem;font-size:13px"><span style="color:#1a7f37;font-weight:700">✅ ${cupW}W</span><span>${cupD}D</span><span style="color:var(--dc-red);font-weight:600">❌ ${cupL}L</span><span style="color:var(--text3)">${cupMs.length} played</span></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Competition</th><th>Opponent</th><th>Venue</th><th>Score</th><th>Result</th></tr></thead><tbody>${cupRows}</tbody></table></div>`;
+  } else {
+    cupCard.style.display='none';
   }
 }
 
@@ -2160,13 +2349,17 @@ function renderPlayers(){
 /* ── SEASON REPORT — visual, screen-optimised ── */
 function buildSeasonReportHTML(){
   if(!matches.length)return'<div class="empty">No match data yet. Log or import matches first.</div>';
+  const leagueMs=matches.filter(m=>!/cup|munhumutapa|friendly|charity|knockout/i.test(m.comp||''));
+  // W/D/L from all games; pts from CRSL only
   const W=matches.filter(m=>result(m.gf,m.ga)==='W').length;
   const D=matches.filter(m=>result(m.gf,m.ga)==='D').length;
   const L=matches.filter(m=>result(m.gf,m.ga)==='L').length;
   const GF=matches.reduce((a,m)=>a+m.gf,0),GA=matches.reduce((a,m)=>a+m.ga,0);
-  const CS=matches.filter(m=>m.cs==1).length,pts=W*3+D,diff=GF-GA;
+  const CS=matches.filter(m=>m.cs==1).length;
+  const lW=leagueMs.filter(m=>result(m.gf,m.ga)==='W').length,lD=leagueMs.filter(m=>result(m.gf,m.ga)==='D').length;
+  const pts=lW*3+lD,diff=GF-GA;
   const winRate=matches.length?Math.round(W/matches.length*100):0;
-  const avgGoals=(GF/matches.length).toFixed(1),avgConc=(GA/matches.length).toFixed(1);
+  const avgGoals=matches.length?(GF/matches.length).toFixed(1):'0.0',avgConc=matches.length?(GA/matches.length).toFixed(1):'0.0';
   const totalG=GF+GA,gfPct=totalG>0?Math.round(GF/totalG*100):50;
   const shotAcc=parseFloat(avg(matches,'shots'))>0?(parseFloat(avg(matches,'sot'))/parseFloat(avg(matches,'shots'))*100).toFixed(0)+'%':'—';
   const form=matches.slice(0,10).map(m=>result(m.gf,m.ga));
@@ -2186,7 +2379,7 @@ function buildSeasonReportHTML(){
   return`
   <div class="metrics" style="margin-bottom:1.3rem">
     <div class="mc"><div class="ml">Played</div><div class="mv">${matches.length}</div></div>
-    <div class="mc"><div class="ml">Points</div><div class="mv black">${pts}</div></div>
+    <div class="mc"><div class="ml">CRSL Points</div><div class="mv black">${pts}</div></div>
     <div class="mc"><div class="ml">Wins</div><div class="mv green">${W}</div></div>
     <div class="mc"><div class="ml">Draws</div><div class="mv">${D}</div></div>
     <div class="mc"><div class="ml">Losses</div><div class="mv red">${L}</div></div>
@@ -2254,21 +2447,24 @@ function buildSeasonReportHTML(){
 
 /* ── SEASON SHEET — compact, print-optimised ── */
 function buildSeasonSheetHTML(){
+  const leagueMs=matches.filter(m=>!/cup|munhumutapa|friendly|charity|knockout/i.test(m.comp||''));
   const W=matches.filter(m=>result(m.gf,m.ga)==='W').length,D=matches.filter(m=>result(m.gf,m.ga)==='D').length,L=matches.filter(m=>result(m.gf,m.ga)==='L').length;
-  const GF=matches.reduce((a,m)=>a+m.gf,0),GA=matches.reduce((a,m)=>a+m.ga,0),CS=matches.filter(m=>m.cs==1).length,pts=W*3+D,diff=GF-GA;
+  const GF=matches.reduce((a,m)=>a+m.gf,0),GA=matches.reduce((a,m)=>a+m.ga,0),CS=matches.filter(m=>m.cs==1).length;
+  const lW=leagueMs.filter(m=>result(m.gf,m.ga)==='W').length,lD=leagueMs.filter(m=>result(m.gf,m.ga)==='D').length;
+  const pts=lW*3+lD,diff=GF-GA;
   const topS=[...players].sort((a,b)=>b.goals-a.goals)[0];
   const topA=[...players].filter(p=>p.assists>0).sort((a,b)=>b.assists-a.assists)[0];
   const topApps=[...players].sort((a,b)=>b.apps-a.apps)[0];
   const topGK=[...players].filter(p=>p.pos==='GK').sort((a,b)=>(b.cs||0)-(a.cs||0))[0];
   const matchRows=matches.map(m=>`<tr><td style="color:var(--text3)">${m.date||'GW'+(m.week||'')}</td><td style="font-weight:600">${m.opp}</td><td>${m.venue}</td><td>${m.comp}</td><td style="font-weight:700;text-align:center">${m.gf}–${m.ga}</td><td style="text-align:center">${resBadge(result(m.gf,m.ga))}</td><td style="text-align:center">${m.cs==1?'✓':'—'}</td><td style="text-align:center">${m.shots||0}</td><td style="text-align:center">${m.sot||0}</td><td style="text-align:center">${m.corners||0}</td><td style="text-align:center">${m.yc||0}</td><td style="text-align:center">${m.rc||0}</td></tr>`).join('');
-  const outfieldRows=players.filter(p=>p.pos!=='GK').sort((a,b)=>(a.num||99)-(b.num||99)).map(p=>`<tr><td style="font-weight:700;color:var(--dc-green-dark)">${p.num||'—'}</td><td style="font-weight:600">${p.name}</td><td><span class="badge bg" style="font-size:10px">${p.pos}</span></td><td style="text-align:center">${p.apps}</td><td style="text-align:center">${p.mins||0}</td><td style="text-align:center;font-weight:700;color:var(--dc-green-dark)">${p.goals}</td><td style="text-align:center">${p.assists}</td><td style="text-align:center;color:#a07000">${p.yc}</td><td style="text-align:center;color:var(--dc-red)">${p.rc||0}</td></tr>`).join('');
-  const gkRows=players.filter(p=>p.pos==='GK').sort((a,b)=>(a.num||99)-(b.num||99)).map(p=>`<tr><td style="font-weight:700;color:var(--dc-green-dark)">${p.num||'—'}</td><td style="font-weight:600">${p.name}</td><td style="text-align:center">${p.apps}</td><td style="text-align:center">${p.mins||0}</td><td style="text-align:center;font-weight:700;color:var(--dc-green-dark)">${p.cs||0}</td><td style="text-align:center;color:var(--dc-red)">${p.gc||0}</td><td style="text-align:center;color:#a07000">${p.yc}</td><td style="text-align:center;color:var(--dc-red)">${p.rc||0}</td></tr>`).join('');
+  const outfieldRows=players.filter(p=>p.pos!=='GK').sort((a,b)=>(+b.mins||0)-(+a.mins||0)).map(p=>`<tr><td style="font-weight:700;color:var(--dc-green-dark)">${p.num||'—'}</td><td style="font-weight:600">${p.name}</td><td><span class="badge bg" style="font-size:10px">${p.pos}</span></td><td style="text-align:center">${p.apps}</td><td style="text-align:center">${p.mins||0}</td><td style="text-align:center;font-weight:700;color:var(--dc-green-dark)">${p.goals}</td><td style="text-align:center">${p.assists}</td><td style="text-align:center;color:#a07000">${p.yc}</td><td style="text-align:center;color:var(--dc-red)">${p.rc||0}</td></tr>`).join('');
+  const gkRows=players.filter(p=>p.pos==='GK').sort((a,b)=>(+b.mins||0)-(+a.mins||0)).map(p=>`<tr><td style="font-weight:700;color:var(--dc-green-dark)">${p.num||'—'}</td><td style="font-weight:600">${p.name}</td><td style="text-align:center">${p.apps}</td><td style="text-align:center">${p.mins||0}</td><td style="text-align:center;font-weight:700;color:var(--dc-green-dark)">${p.cs||0}</td><td style="text-align:center;color:var(--dc-red)">${p.gc||0}</td><td style="text-align:center;color:#a07000">${p.yc}</td><td style="text-align:center;color:var(--dc-red)">${p.rc||0}</td></tr>`).join('');
   return`
   <div class="sheet-section">
     <div class="sheet-section-hdr">Season Summary</div>
     <div class="sheet-summary-grid">
       <div class="sheet-sum-box"><div class="sheet-sum-val">${matches.length}</div><div class="sheet-sum-lbl">Played</div></div>
-      <div class="sheet-sum-box"><div class="sheet-sum-val" style="color:#111">${pts}</div><div class="sheet-sum-lbl">Points</div></div>
+      <div class="sheet-sum-box"><div class="sheet-sum-val" style="color:#111">${pts}</div><div class="sheet-sum-lbl">CRSL Points</div></div>
       <div class="sheet-sum-box"><div class="sheet-sum-val" style="color:var(--dc-green-dark)">${W}</div><div class="sheet-sum-lbl">Wins</div></div>
       <div class="sheet-sum-box"><div class="sheet-sum-val">${D}</div><div class="sheet-sum-lbl">Draws</div></div>
       <div class="sheet-sum-box red"><div class="sheet-sum-val" style="color:var(--dc-red)">${L}</div><div class="sheet-sum-lbl">Losses</div></div>
@@ -2459,6 +2655,7 @@ applyLogo();
 updateBackupLabel();
 document.getElementById('m-date').value=new Date().toISOString().split('T')[0];
 buildMatchSlots();
+if(typeof recalcPlayerStats==='function')recalcPlayerStats(true);
 renderOverview();
 </script>
 
@@ -2910,6 +3107,686 @@ function drOpen(){
     drBuilt=true;
   }
   setTimeout(drSize,30);
+}
+
+/* ===================== POST-MATCH REPORT ===================== */
+
+/* ── slide CSS injected at runtime ── */
+const PMR_CSS=`
+.pmr-slide{width:100%;aspect-ratio:16/9;background:#0c1e4a;position:relative;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;color:#fff;margin-bottom:0;display:flex;flex-direction:column}
+.pmr-sh{padding:22px 40px 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.pmr-st{font-size:2.2vw;font-weight:900;color:#fff;letter-spacing:1px}
+.pmr-slog{width:5vw;height:5vw;border-radius:50%;object-fit:cover;border:2px solid #c9a227;background:#fff}
+.pmr-slog-ph{width:5vw;height:5vw;border-radius:50%;background:#1d2e5c;border:2px solid #c9a227;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:1vw;color:#c9a227}
+.pmr-gold{height:3px;background:linear-gradient(90deg,#c9a227,transparent);margin:8px 40px 0;flex-shrink:0}
+.pmr-body{flex:1;padding:14px 40px 20px;overflow:hidden}
+.pmr-cover{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px}
+.pmr-clog{width:12vw;height:12vw;border-radius:50%;object-fit:cover;border:3px solid #c9a227;background:#fff}
+.pmr-clog-ph{width:12vw;height:12vw;border-radius:50%;background:#1d2e5c;border:3px solid #c9a227;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:2vw;color:#c9a227}
+.pmr-ctitle{font-size:4vw;font-weight:900;color:#fff;letter-spacing:2px;text-align:center;margin-top:12px}
+.pmr-copp{font-size:2.5vw;font-weight:800;color:#2ecc71;text-align:center}
+.pmr-cmeta{font-style:italic;font-size:1.5vw;color:#aaa;text-align:center}
+.pmr-foot{position:absolute;bottom:0;left:0;right:0;height:28px;background:#152448}
+.pmr-xi-lay{display:flex;gap:2vw;height:100%}
+.pmr-xi-list{flex:0 0 38%;display:flex;flex-direction:column}
+.pmr-xi-club{font-size:1.2vw;font-weight:700;margin-bottom:4px}
+.pmr-xi-gl{height:2px;background:#c9a227;margin-bottom:6px}
+.pmr-xi-row{display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:3px}
+.pmr-xi-row:nth-child(odd){background:rgba(255,255,255,.04)}
+.pmr-xi-pb{width:3vw;height:1.6vw;border-radius:3px;background:#1d2e5c;display:flex;align-items:center;justify-content:center;font-size:.7vw;font-weight:700;color:#c9a227;flex-shrink:0}
+.pmr-xi-nm{flex:1;font-size:.85vw;font-weight:500}
+.pmr-xi-ev{font-size:.75vw;color:#c9a227;white-space:nowrap}
+.pmr-pitch{flex:1;display:flex;align-items:center;justify-content:center}
+.pmr-sum-lay{display:flex;gap:2vw;height:100%}
+.pmr-sum-l{flex:0 0 28%;display:flex;flex-direction:column;gap:.6vw}
+.pmr-res{background:#152448;border-radius:6px;padding:1.2vw;text-align:center}
+.pmr-res-lbl{font-size:.9vw;font-weight:700;letter-spacing:1px;margin-bottom:4px}
+.pmr-res-sc{font-size:4.5vw;font-weight:900;line-height:1}
+.pmr-res-vs{font-style:italic;font-size:.75vw;color:#888;margin-top:4px}
+.pmr-scorer{background:#1e5c1e;border-radius:4px;padding:5px 10px;font-size:.85vw;font-weight:700}
+.pmr-mile{background:#1d2e5c;border-radius:4px;padding:5px 10px;font-size:.8vw;color:#c9a227;font-weight:600}
+.pmr-sum-r{flex:1;display:flex;flex-direction:column;gap:.8vw}
+.pmr-half{background:#152448;border-radius:6px;padding:.9vw 1vw;flex:1}
+.pmr-half-t{font-size:.85vw;font-weight:700;letter-spacing:.5px;margin-bottom:4px;text-transform:uppercase}
+.pmr-half-d{height:2px;background:#c9a227;margin-bottom:6px}
+.pmr-half-ul{list-style:none;display:flex;flex-direction:column;gap:4px}
+.pmr-half-ul li{font-size:.8vw;color:#ccc;padding-left:10px;position:relative;line-height:1.35}
+.pmr-half-ul li::before{content:'•';position:absolute;left:0;color:#c9a227}
+.pmr-sg{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);gap:.6vw;height:100%}
+.pmr-sc{border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:.5vw}
+.pmr-sc.g{background:#1e5c1e}.pmr-sc.o{background:#c07000}.pmr-sc.n{background:#1d2e5c}.pmr-sc.r{background:#cc2200}.pmr-sc.p{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+.pmr-sl{font-size:.65vw;font-weight:700;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px}
+.pmr-sv{font-size:2.8vw;font-weight:900;color:#fff;line-height:1}
+.pmr-sn{font-size:.6vw;color:rgba(255,255,255,.6);margin-top:2px;font-style:italic}
+.pmr-sfooter{position:absolute;bottom:10px;left:40px;right:40px;background:#152448;border-radius:4px;padding:5px 12px;font-size:.65vw;color:#c9a227;text-align:center}
+.pmr-tl{position:relative;height:100%;overflow:hidden}
+.pmr-tl-line{position:absolute;left:50px;top:0;bottom:0;width:2px;background:rgba(255,255,255,.12)}
+.pmr-ev{display:flex;align-items:center;gap:0;padding:5px 0}
+.pmr-ev-min{width:50px;text-align:right;padding-right:10px;font-size:.9vw;font-weight:900}
+.pmr-ev-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;z-index:1;margin-right:12px}
+.pmr-ev-dot.goal{background:#1e5c1e}.pmr-ev-dot.miss{background:#c07000}.pmr-ev-dot.sub{background:#1d2e5c;border:1px solid #aaa}.pmr-ev-dot.red{background:#cc2200}.pmr-ev-dot.shot{background:#1d2e5c;border:1px solid rgba(255,255,255,.3)}
+.pmr-ev-c{flex:1}.pmr-ev-type{font-size:.7vw;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:1px}.pmr-ev-desc{font-size:.78vw;color:#bbb;line-height:1.3}
+.pmr-ev-hl{background:rgba(255,255,255,.04);border-radius:4px;padding:4px 8px}
+.pmr-st-wrap{overflow:hidden;height:100%}
+.pmr-st-tbl{width:100%;border-collapse:collapse}
+.pmr-st-tbl th{background:rgba(255,255,255,.08);padding:7px 10px;font-size:.7vw;font-weight:700;color:#c9a227;text-transform:uppercase;text-align:left;border-bottom:2px solid #c9a227}
+.pmr-st-tbl td{padding:8px 10px;font-size:.78vw;color:#ddd;border-bottom:1px solid rgba(255,255,255,.07)}
+.pmr-st-tbl tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.pmr-poff{color:#ff8080;font-weight:600}.pmr-pon{color:#6eff6e;font-weight:600}
+.pmr-snote{background:#c07000;border-radius:5px;padding:8px 12px;font-size:.75vw;font-weight:700;color:#fff;margin-top:8px;line-height:1.4}
+.pmr-ahl{background:#c07000;border-radius:6px;padding:.9vw 1.2vw;margin-bottom:.8vw;display:flex;align-items:flex-start;gap:1.5vw}
+.pmr-ahl-t{font-size:1.4vw;font-weight:900;color:#fff;white-space:nowrap;padding-right:1.5vw;border-right:2px solid rgba(255,255,255,.3);flex-shrink:0}
+.pmr-ahl-d{font-style:italic;font-size:.82vw;color:rgba(255,255,255,.85);line-height:1.5}
+.pmr-acols{display:flex;gap:.8vw;flex:1}
+.pmr-acol{flex:1;border-radius:6px;padding:.9vw}
+.pmr-acol.pos{background:#1e5c1e}.pmr-acol.neg{background:#9e1a00}
+.pmr-acol-t{font-size:.75vw;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;display:flex;align-items:center;gap:4px}
+.pmr-aul{list-style:none;display:flex;flex-direction:column;gap:4px}
+.pmr-aul li{font-size:.75vw;color:rgba(255,255,255,.9);padding-left:10px;position:relative;line-height:1.35}
+.pmr-aul li::before{content:'•';position:absolute;left:0;color:rgba(255,255,255,.5)}
+.pmr-rg{display:grid;grid-template-columns:repeat(3,1fr);gap:1vw;height:100%}
+.pmr-rb{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;display:flex;flex-direction:column;overflow:hidden}
+.pmr-rb-h{padding:.9vw 1vw;font-size:1vw;font-weight:800;text-transform:uppercase;letter-spacing:.3px}
+.pmr-rb-h.r1{background:#9e1a00}.pmr-rb-h.r2{background:#1d2e5c}.pmr-rb-h.r3{background:#c07000}
+.pmr-rb-b{padding:1vw;font-size:.8vw;color:#ccc;line-height:1.6;flex:1}
+.pmr-an-c{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:.8vw}
+.pmr-an-log{width:12vw;height:12vw;border-radius:50%;object-fit:cover;border:3px solid #c9a227;background:#fff}
+.pmr-an-log-ph{width:12vw;height:12vw;border-radius:50%;background:#1d2e5c;border:3px solid #c9a227;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:2vw;color:#c9a227}
+.pmr-an-name{font-size:2vw;font-weight:900;text-align:center}.pmr-an-role{font-style:italic;font-size:1.2vw;color:#888;text-align:center}
+.pmr-pf-wrap{position:relative;height:100%;aspect-ratio:17/27;border-radius:4px;overflow:hidden;flex-shrink:0}
+.pmr-pf-svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.pmr-ptok{position:absolute;transform:translate(-50%,-50%);cursor:grab;user-select:none;touch-action:none;display:flex;flex-direction:column;align-items:center;z-index:2}
+.pmr-ptok.pmr-dragging{cursor:grabbing;z-index:10}
+.pmr-ptok-c{width:2.2vw;height:2.2vw;border-radius:50%;background:#0c1e4a;border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;font-size:0.6vw;font-weight:900;color:#fff;transition:background .15s,border-color .15s,color .15s}
+.pmr-ptok-n{font-size:0.6vw;text-align:center;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.95);margin-top:3px;max-width:5vw;overflow:hidden;white-space:nowrap;line-height:1.2;font-weight:600}
+.pmr-pc{position:absolute;bottom:5px;right:5px;background:rgba(0,0,0,.65);border-radius:12px;padding:3px 8px;display:flex;align-items:center;gap:5px;z-index:20}
+.pmr-pc-lbl{font-size:0.5vw;color:rgba(255,255,255,.7);font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap}
+.pmr-pc-b{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.35);cursor:pointer;padding:0;flex-shrink:0;transition:transform .1s}
+.pmr-pc-b:hover{transform:scale(1.25)}
+.pmr-pc-b.pmr-active{border-color:#c9a227!important;box-shadow:0 0 0 2px #c9a22788;transform:scale(1.15)}
+.pmr-slide-sep{height:2px;background:linear-gradient(90deg,transparent,#c9a227 30%,#c9a227 70%,transparent);margin:6px 0 6px;position:relative;display:flex;align-items:center;justify-content:center}
+.pmr-slide-sep::after{content:attr(data-label);position:absolute;background:#c9a227;color:#0c1e4a;font-size:10px;font-weight:800;padding:1px 12px;border-radius:10px;letter-spacing:.5px;white-space:nowrap}
+.pmr-edit-hint{background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.4);border-radius:5px;padding:6px 14px;font-size:12px;color:#c9a227;text-align:center;margin-bottom:8px}
+[contenteditable]:focus{outline:1px dashed rgba(201,162,39,.7)!important;border-radius:2px}
+@media print{.pmr-slide-sep,.pmr-edit-hint,.pmr-pc,.pmr-mob-ctrl,.pmr-land-hint{display:none!important}.pmr-slide{box-shadow:inset 0 0 0 3px rgba(201,162,39,.35)}}
+/* ── MOBILE SWIPER ── */
+.pmr-mob-ctrl{display:none;position:sticky;bottom:0;left:0;right:0;background:rgba(12,30,74,.97);padding:10px 16px;z-index:999;align-items:center;gap:12px;border-top:2px solid #c9a227}
+.pmr-mob-btn{background:#c9a227;color:#0c1e4a;border:none;font-size:22px;font-weight:900;width:46px;height:46px;border-radius:50%;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.pmr-mob-btn:disabled{background:#333;color:#666;cursor:not-allowed}
+.pmr-mob-center{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px}
+.pmr-mob-pg{color:#fff;font-size:13px;font-weight:700}
+.pmr-mob-dots{display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:center}
+.pmr-mob-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);cursor:pointer;transition:all .15s;flex-shrink:0}
+.pmr-mob-dot.pmr-dot-on{background:#c9a227;width:14px;border-radius:4px}
+.pmr-land-hint{display:none;background:#c9a227;color:#0c1e4a;text-align:center;padding:7px 14px;font-size:12px;font-weight:700;border-radius:5px;margin-bottom:8px;letter-spacing:.3px}
+@media(max-width:768px) and (orientation:portrait){.pmr-land-hint{display:block}}
+/* Mobile font boosts */
+@media(max-width:640px){
+  .pmr-sh{padding:10px 14px 0}.pmr-gold{margin:4px 14px 0}.pmr-body{padding:6px 12px 8px}
+  .pmr-st{font-size:clamp(13px,4vw,20px)}
+  .pmr-ctitle{font-size:clamp(20px,7vw,36px)}.pmr-copp{font-size:clamp(13px,4.5vw,22px)}.pmr-cmeta{font-size:clamp(11px,3vw,16px)}
+  .pmr-clog,.pmr-clog-ph{width:20vw;height:20vw}.pmr-an-log,.pmr-an-log-ph{width:20vw;height:20vw}.pmr-slog,.pmr-slog-ph{width:9vw;height:9vw}
+  .pmr-xi-club{font-size:clamp(10px,2.8vw,14px)}.pmr-xi-nm{font-size:clamp(9px,2.5vw,13px)}.pmr-xi-pb{width:clamp(26px,6vw,36px);height:clamp(17px,3.5vw,22px);font-size:clamp(8px,1.8vw,11px)}.pmr-xi-ev{font-size:clamp(8px,2vw,11px)}
+  .pmr-ptok-c{width:clamp(18px,4vw,26px);height:clamp(18px,4vw,26px);font-size:clamp(7px,1.5vw,10px)}.pmr-ptok-n{font-size:clamp(7px,1.8vw,10px)}
+  .pmr-res-sc{font-size:clamp(26px,9vw,48px)}.pmr-res-lbl{font-size:clamp(9px,2vw,12px)}.pmr-res-vs{font-size:clamp(8px,1.8vw,11px)}
+  .pmr-half-t{font-size:clamp(9px,2.2vw,12px)}.pmr-half-ul li{font-size:clamp(8px,2vw,11px)}.pmr-scorer{font-size:clamp(9px,2vw,11px)}
+  .pmr-sv{font-size:clamp(18px,5.5vw,30px)}.pmr-sl{font-size:clamp(8px,1.8vw,10px)}
+  .pmr-ev-min{font-size:clamp(10px,2.5vw,14px)}.pmr-ev-type{font-size:clamp(8px,2vw,11px)}.pmr-ev-desc{font-size:clamp(8px,2.2vw,12px)}
+  .pmr-ahl-t{font-size:clamp(12px,3vw,18px)}.pmr-ahl-d{font-size:clamp(8px,2vw,12px)}
+  .pmr-aul li{font-size:clamp(8px,2.2vw,12px)}.pmr-acol-t{font-size:clamp(8px,2vw,11px)}
+  .pmr-rb-h{font-size:clamp(9px,2.5vw,13px);padding:5px 7px}.pmr-rb-b{font-size:clamp(8px,2vw,11px)}
+  .pmr-an-name{font-size:clamp(16px,4.5vw,26px)}.pmr-an-role{font-size:clamp(11px,2.8vw,16px)}
+  .pmr-st-tbl th,.pmr-st-tbl td{font-size:clamp(8px,2vw,11px);padding:4px 5px}
+  .pmr-snote{font-size:clamp(8px,2vw,11px)}.pmr-sfooter{font-size:clamp(8px,1.8vw,10px);padding:3px 8px}
+  .pmr-pc-lbl{font-size:clamp(7px,1.5vw,9px)}.pmr-pc-b{width:16px;height:16px}
+}
+`;
+
+function pmrInjectCSS(){if(!document.getElementById('pmr-style')){const s=document.createElement('style');s.id='pmr-style';s.textContent=PMR_CSS;document.head.appendChild(s);}}
+
+function pmrSaveKey(){
+  const k=(document.getElementById('pmr-apikey').value||'').trim();
+  if(!k){document.getElementById('pmr-key-msg').textContent='Enter a key first';return;}
+  localStorage.setItem('pmr_gemini_key',k);
+  document.getElementById('pmr-key-msg').textContent='✓ Saved';
+  setTimeout(()=>document.getElementById('pmr-key-msg').textContent='',2000);
+}
+
+async function pmrCheckKey(){
+  const key=(document.getElementById('pmr-apikey').value||localStorage.getItem('pmr_gemini_key')||'').trim();
+  const diag=document.getElementById('pmr-key-diag');
+  const msg=document.getElementById('pmr-key-msg');
+  if(!key){msg.textContent='Save a key first';msg.style.color='red';return;}
+  diag.style.display='block';
+  diag.textContent='Checking key and listing available models…';
+  msg.textContent='';
+  try{
+    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=50`);
+    const json=await resp.json();
+    if(!resp.ok){diag.textContent='API error '+resp.status+': '+(json.error?.message||JSON.stringify(json));diag.style.color='red';return;}
+    const names=(json.models||[]).map(m=>m.name.replace('models/','')).filter(n=>n.includes('gemini'));
+    if(!names.length){diag.textContent='Key works but no Gemini models found — check API permissions.';return;}
+    diag.style.color='#1a5c1a';
+    diag.innerHTML='<strong>✓ Key valid. Available Gemini models:</strong><br>'+names.join('<br>');
+  }catch(e){diag.textContent='Network error: '+e.message;diag.style.color='red';}
+}
+
+function initPMReport(){
+  pmrInjectCSS();
+  // load saved key
+  const k=localStorage.getItem('pmr_gemini_key')||'';
+  if(k)document.getElementById('pmr-apikey').value=k;
+  // populate match selector
+  const sel=document.getElementById('pmr-match-sel');
+  sel.innerHTML='<option value="">— Select a logged match —</option>';
+  (matches||[]).forEach((m,i)=>{
+    const res=m.gf>m.ga?'W':m.gf<m.ga?'L':'D';
+    const d=m.date?new Date(m.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'}):'';
+    sel.innerHTML+=`<option value="${i}">${d} vs ${_tesc(m.opp)} (${m.gf}-${m.ga} ${res})</option>`;
+  });
+  // reset
+  document.getElementById('pmr-ai-fields').style.display='none';
+  document.getElementById('pmr-slides').style.display='none';
+  document.querySelectorAll('.pmr-form-section').forEach(el=>el.style.display='');
+  document.getElementById('pmr-rawnotes').value='';
+  document.getElementById('pmr-ai-status').textContent='';
+}
+
+function pmrLoadMatch(){
+  const idx=document.getElementById('pmr-match-sel').value;
+  if(idx==='')return;
+  const m=matches[+idx];
+  const res=m.gf>m.ga?'HOME WIN':m.gf<m.ga?'AWAY LOSS':'DRAW';
+  const d=m.date?new Date(m.date).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  const prev=document.getElementById('pmr-match-preview');
+  prev.style.display='block';
+  prev.innerHTML=`<strong>${res}</strong> &nbsp;${m.gf}–${m.ga} &nbsp;vs ${_tesc(m.opp)} &nbsp;|&nbsp; ${d} &nbsp;|&nbsp; ${_tesc(m.venue)} &nbsp;|&nbsp; ${_tesc(m.formation||'')} &nbsp;|&nbsp; ${m.shots||0} shots, ${m.sot||0} on target, ${m.corners||0} corners`;
+}
+
+async function pmrFleshWithAI(){
+  const idx=document.getElementById('pmr-match-sel').value;
+  if(idx===''){alert('Please select a match first.');return;}
+  const key=localStorage.getItem('pmr_gemini_key')||(document.getElementById('pmr-apikey').value||'').trim();
+  if(!key){alert('Please enter your Gemini API key first (click ⚙ API Key at the top).');document.getElementById('pmr-api-card').style.display='block';return;}
+  const m=matches[+idx];
+  const rawNotes=document.getElementById('pmr-rawnotes').value.trim();
+  const btn=document.getElementById('pmr-ai-btn');
+  const status=document.getElementById('pmr-ai-status');
+  btn.disabled=true;btn.textContent='⏳ Generating…';status.textContent='Sending to Gemini AI…';
+
+  // Build context for AI
+  const scorers=(m.goals||[]).map(g=>`${g.player} ${g.minute?g.minute+"'":''}${g.assist?' (ast: '+g.assist+')':''}`).join(', ')||'none';
+  const subs=(m.subs||[]).map(s=>`${s.off||'?'} → ${s.on||'?'} (${s.minute||'?'}')`).join(', ')||'none';
+  const reds=(m.redCards||[]).map(r=>`${r.player} ${r.minute?r.minute+"'":''}` ).join(', ')||'none';
+  const yellows=(m.yellowCards||[]).map(r=>r.player).join(', ')||'none';
+  const bc=document.getElementById('pmr-bc').value||'0';
+  const shotAcc=m.shots>0?Math.round((m.sot/m.shots)*100):0;
+  const convRate=m.shots>0?Math.round((m.gf/m.shots)*100):0;
+  const xi=(m.teamsheet&&m.teamsheet.starting||[]).filter(Boolean).join(', ')||'not recorded';
+
+  const prompt=`You are Valentine Tapiwa Kadonzvo, Performance & Tactical Analyst for Kwekwe United FC in the Zimbabwe Premier Soccer League (CRSL). You are writing a post-match report.
+
+MATCH DATA:
+- Date: ${m.date||''}
+- Opponent: ${m.opp}
+- Venue: ${m.venue}
+- Result: ${m.gf}–${m.ga} (${m.gf>m.ga?'WIN':m.gf<m.ga?'LOSS':'DRAW'})
+- Formation: ${m.formation||'not recorded'}
+- Starting XI: ${xi}
+- Goals: ${scorers}
+- Substitutions: ${subs}
+- Red cards: ${reds}
+- Yellow cards: ${yellows}
+- Shots: ${m.shots||0} total, ${m.sot||0} on target (${shotAcc}% accuracy)
+- Big chances created: ${bc}
+- Crosses: ${m.crosses||0}
+- Corners: ${m.corners||0}
+- Conversion rate: ${convRate}%
+- Clean sheet: ${m.cs==1?'YES':'NO'}
+
+RAW ANALYST NOTES:
+${rawNotes||'(no additional notes provided — work from match data)'}
+
+Write a post-match analytical report. Be ANALYTICAL not descriptive — focus on tactical patterns, positional structure, pressing triggers, space exploitation, efficiency ratios, structural strengths and weaknesses. Do NOT just retell events. Write like a top-level performance analyst.
+
+Return ONLY valid JSON (no markdown, no explanation) with exactly these keys:
+{
+  "h1_bullets": ["analytical bullet 1","analytical bullet 2","analytical bullet 3"],
+  "h2_bullets": ["analytical bullet 1","analytical bullet 2","analytical bullet 3"],
+  "analysis_headline": "THREE-WORD TACTICAL THEME IN CAPS",
+  "analysis_headline_desc": "One analytical sentence expanding on the theme.",
+  "positives": ["tactical positive 1","tactical positive 2","tactical positive 3","tactical positive 4","tactical positive 5"],
+  "negatives": ["tactical negative 1","tactical negative 2","tactical negative 3","tactical negative 4"],
+  "rec1_title": "TITLE IN CAPS",
+  "rec1_body": "Detailed recommendation paragraph.",
+  "rec2_title": "TITLE IN CAPS",
+  "rec2_body": "Detailed recommendation paragraph.",
+  "rec3_title": "TITLE IN CAPS",
+  "rec3_body": "Detailed recommendation paragraph.",
+  "sub_impacts": [{"time":"60'","off":"Name","on":"Name","shift":"Positional shift description","impact":"Tactical impact description"}],
+  "sub_note": "One-sentence analytical observation about the substitutions collectively."
+}`;
+
+  try{
+    // Models that actually work on this key (confirmed by error diagnostics)
+    // Ordered fastest-first; 404s removed
+    const MODELS=[
+      {model:'gemini-2.0-flash-lite', api:'v1beta', timeout:35000},
+      {model:'gemini-2.0-flash',      api:'v1beta', timeout:35000},
+      {model:'gemini-2.0-flash-001',  api:'v1beta', timeout:35000},
+      {model:'gemini-2.5-flash',      api:'v1beta', timeout:55000},
+    ];
+    let data=null; const errs=[];
+    for(const {model,api,timeout} of MODELS){
+      try{
+        status.textContent=`Generating with ${model}…`;
+        const controller=new AbortController();
+        const tid=setTimeout(()=>controller.abort(),timeout);
+        const resp=await fetch(`https://generativelanguage.googleapis.com/${api}/models/${model}:generateContent?key=${key}`,{
+          method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,
+          body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.8,maxOutputTokens:8192}})
+        });
+        clearTimeout(tid);
+        if(resp.status===429){
+          // Rate limited — wait 3 seconds then try next model
+          errs.push(`${model}: 429 (rate limit)`);console.warn(model,'429 rate limit, waiting 3s…');
+          await new Promise(r=>setTimeout(r,3000));continue;
+        }
+        if(!resp.ok){const t=await resp.text();errs.push(`${model}: ${resp.status}`);console.warn(model,resp.status,t);continue;}
+        data=await resp.json();console.log('Used model:',model);break;
+      }catch(e){errs.push(`${model}: ${e.name==='AbortError'?'timeout':e.message}`);console.warn(model,e.message);continue;}
+    }
+    if(!data)throw new Error('All models failed. Errors: '+errs.join(' | '));
+
+    let raw=(data.candidates?.[0]?.content?.parts?.[0]?.text)||'';
+    // strip markdown code fences if present
+    raw=raw.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/```\s*$/,'').trim();
+    // extract just the JSON object (handles extra text before/after)
+    const jsonStart=raw.indexOf('{'); const jsonEnd=raw.lastIndexOf('}');
+    if(jsonStart!==-1 && jsonEnd!==-1) raw=raw.slice(jsonStart,jsonEnd+1);
+    // attempt parse; if truncated, try to salvage by closing open structures
+    let ai;
+    try{ ai=JSON.parse(raw); }
+    catch(parseErr){
+      // count open braces/brackets to detect truncation
+      let depth=0,inStr=false,esc=false,fixed=raw;
+      for(const ch of raw){
+        if(esc){esc=false;continue;} if(ch==='\\'&&inStr){esc=true;continue;}
+        if(ch==='"'&&!esc){inStr=!inStr;continue;} if(inStr)continue;
+        if(ch==='{'||ch==='[')depth++; else if(ch==='}'||ch===']')depth--;
+      }
+      // close any open string then structures
+      if(inStr) fixed+='"';
+      for(let i=0;i<Math.abs(depth);i++) fixed+=depth>0?'}':']';
+      try{ ai=JSON.parse(fixed); }
+      catch(e2){ throw new Error('JSON parse error even after repair. Raw: '+raw.slice(0,200)); }
+    }
+    pmrFillAIFields(ai,m);
+    status.textContent='✓ Analysis generated — review and edit below';
+    status.style.color='var(--dc-green-dark)';
+  }catch(err){
+    status.textContent='Error: '+err.message;
+    status.style.color='var(--dc-red)';
+    console.error(err);
+  }
+  btn.disabled=false;btn.textContent='✨ Flesh Out with AI';
+}
+
+function pmrFillAIFields(ai,m){
+  document.getElementById('pmr-h1').value=(ai.h1_bullets||[]).join('\n');
+  document.getElementById('pmr-h2').value=(ai.h2_bullets||[]).join('\n');
+  document.getElementById('pmr-hl-title').value=ai.analysis_headline||'';
+  document.getElementById('pmr-hl-desc').value=ai.analysis_headline_desc||'';
+  document.getElementById('pmr-pos').value=(ai.positives||[]).join('\n');
+  document.getElementById('pmr-neg').value=(ai.negatives||[]).join('\n');
+
+  // Recommendations
+  const rw=document.getElementById('pmr-recs-wrap');rw.innerHTML='';
+  [[ai.rec1_title,ai.rec1_body],[ai.rec2_title,ai.rec2_body],[ai.rec3_title,ai.rec3_body]].forEach(([t,b],i)=>{
+    rw.innerHTML+=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:.8rem;margin-bottom:.5rem">
+      <div style="font-size:12px;font-weight:700;margin-bottom:.4rem">Recommendation 0${i+1}</div>
+      <div class="fg"><div class="field"><label>Title</label><input class="pmr-rec-t" value="${_tesc(t||'')}"></div><div class="field"><label>Description</label><textarea class="pmr-rec-b" style="min-height:60px">${_tesc(b||'')}</textarea></div></div>
+    </div>`;
+  });
+
+  // Substitutions
+  const sw=document.getElementById('pmr-subs-wrap');sw.innerHTML='';
+  const subData=ai.sub_impacts||(m.subs||[]).map(s=>({time:s.minute?s.minute+"'":'',off:s.off||'',on:s.on||'',shift:'',impact:''}));
+  subData.forEach((s,i)=>{
+    sw.innerHTML+=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:.7rem;margin-bottom:.4rem">
+      <div class="fg" style="grid-template-columns:80px 1fr 1fr 1fr 2fr">
+        <div class="field"><label>Time</label><input class="pmr-s-min" value="${_tesc(s.time||'')}"></div>
+        <div class="field"><label>Off</label><input class="pmr-s-off" value="${_tesc(s.off||'')}"></div>
+        <div class="field"><label>On</label><input class="pmr-s-on" value="${_tesc(s.on||'')}"></div>
+        <div class="field"><label>Positional Shift</label><input class="pmr-s-sh" value="${_tesc(s.shift||'')}"></div>
+        <div class="field"><label>Impact</label><input class="pmr-s-im" value="${_tesc(s.impact||'')}"></div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('pmr-sub-note').value=ai.sub_note||'';
+
+  document.getElementById('pmr-ai-fields').style.display='block';
+}
+
+function _pmrLogoEl(cls){
+  const src=logoData||localStorage.getItem(TK('logo'));
+  if(src)return`<img src="${src}" class="${cls}" alt="KU">`;
+  return`<div class="${cls.replace('pmr-slog','pmr-slog-ph').replace('pmr-clog','pmr-clog-ph').replace('pmr-an-log','pmr-an-log-ph')}">KU</div>`;
+}
+
+let pmrDotCol='#0c1e4a';
+
+function pmrBuildPitch(formation,starting){
+  const layouts={
+    '4-3-3':    [[50,90],[20,72],[38,72],[62,72],[80,72],[30,52],[50,46],[70,52],[20,28],[50,28],[80,28]],
+    '4-2-3-1':  [[50,90],[20,72],[38,72],[62,72],[80,72],[35,55],[65,55],[20,32],[50,32],[80,32],[50,14]],
+    '4-4-2':    [[50,90],[20,72],[38,72],[62,72],[80,72],[20,50],[40,50],[60,50],[80,50],[38,18],[62,18]],
+    '3-5-2':    [[50,90],[28,72],[50,72],[72,72],[20,50],[38,46],[57,44],[76,50],[20,28],[80,28],[50,14]],
+    '3-4-3':    [[50,90],[28,72],[50,72],[72,72],[20,48],[40,48],[60,48],[80,48],[20,22],[50,22],[80,22]],
+  };
+  const pos=layouts[formation]||layouts['4-3-3'];
+  const names=(starting||[]).filter(Boolean).slice(0,11);
+  const dc=pmrDotCol;
+  const tc=dc==='#ffffff'?'#0c1e4a':'#ffffff';
+  const bc=dc==='#ffffff'?'#0c1e4a':'#ffffff';
+
+  const tokens=names.map((name,i)=>{
+    const [px,py]=pos[i]||[50,50];
+    const shortName=String(name).split(' ').pop().substring(0,10);
+    return`<div class="pmr-ptok" style="left:${px}%;top:${py}%" data-pmr-idx="${i}">
+      <div class="pmr-ptok-c" style="background:${dc};border-color:${bc};color:${tc}">${i+1}</div>
+      <div class="pmr-ptok-n">${_tesc(shortName)}</div>
+    </div>`;
+  }).join('');
+
+  return`<div class="pmr-pf-wrap" id="pmr-pf">
+    <svg class="pmr-pf-svg" viewBox="0 0 340 540" xmlns="http://www.w3.org/2000/svg">
+      ${Array.from({length:20},(_,i)=>`<rect x="0" y="${i*27}" width="340" height="27" fill="${i%2===0?'#2e9040':'#33a048'}"/>`).join('')}
+      <rect x="8" y="8" width="324" height="524" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2"/>
+      <line x1="8" y1="270" x2="332" y2="270" stroke="rgba(255,255,255,.85)" stroke-width="2"/>
+      <circle cx="170" cy="270" r="42" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2"/>
+      <circle cx="170" cy="270" r="4" fill="rgba(255,255,255,.6)"/>
+      <rect x="68" y="8" width="204" height="80" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.5"/>
+      <rect x="118" y="8" width="104" height="36" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.5"/>
+      <rect x="68" y="452" width="204" height="80" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.5"/>
+      <rect x="118" y="496" width="104" height="36" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.5"/>
+      <rect x="130" y="0" width="80" height="12" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.5"/>
+      <rect x="130" y="528" width="80" height="12" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.5"/>
+      <circle cx="170" cy="65" r="3" fill="rgba(255,255,255,.5)"/>
+      <circle cx="170" cy="475" r="3" fill="rgba(255,255,255,.5)"/>
+    </svg>
+    ${tokens}
+    <div class="pmr-pc no-print">
+      <span class="pmr-pc-lbl">DOTS</span>
+      <button class="pmr-pc-b" title="White" style="background:#fff" onclick="pmrSetDotColor('#ffffff')"></button>
+      <button class="pmr-pc-b pmr-active" title="Navy" style="background:#0c1e4a;border-color:rgba(255,255,255,.5)" onclick="pmrSetDotColor('#0c1e4a')"></button>
+      <button class="pmr-pc-b" title="Gold" style="background:#c9a227" onclick="pmrSetDotColor('#c9a227')"></button>
+    </div>
+  </div>`;
+}
+
+function pmrGenerate(){
+  const idx=document.getElementById('pmr-match-sel').value;
+  if(idx===''){alert('Select a match first.');return;}
+  const m=matches[+idx];
+  pmrInjectCSS();
+
+  const gf=+m.gf||0,ga=+m.ga||0;
+  const shots=+m.shots||0,sot=+m.sot||0,crosses=+m.crosses||0,corners=+m.corners||0;
+  const bc=+(document.getElementById('pmr-bc').value)||0;
+  const rc=+m.rc||0;
+  const shotAcc=shots>0?Math.round(sot/shots*100):0;
+  const convRate=shots>0?Math.round(gf/shots*100):0;
+  const bcConv=bc>0?Math.round(gf/bc*100):0;
+  const result=gf>ga?'HOME WIN':gf<ga?'AWAY LOSS':'DRAW';
+  const resultColor=gf>ga?'#2ecc71':gf<ga?'#ff6b6b':'#f1c40f';
+  const opp=m.opp||'';
+  const venue=m.venue||'';
+  const formation=m.formation||'';
+  const dateStr=m.date?new Date(m.date).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
+  const logoHtml=_pmrLogoEl('pmr-slog');
+  const logoCoverHtml=_pmrLogoEl('pmr-clog');
+  const logoAnHtml=_pmrLogoEl('pmr-an-log');
+
+  // Starting XI
+  const xi=(m.teamsheet&&m.teamsheet.starting)||[];
+  const posLabels=pmrPosLabels(formation,xi.length);
+  const xiHtml=xi.filter(Boolean).map((name,i)=>{
+    let ev='';
+    (m.goals||[]).forEach(g=>{if(g.player===name)ev+=` ⚽${g.minute||'?'}'`;});
+    (m.subs||[]).forEach(s=>{if(s.off===name)ev+=` →${s.on||'?'} ${s.minute||'?'}'`;if(s.on===name&&!xi.includes(name))ev='';});
+    (m.redCards||[]).forEach(r=>{if(r.player===name)ev+=` 🟥${r.minute||'?'}'`;});
+    const ast=(m.goals||[]).find(g=>g.assist===name);if(ast)ev+=` AST${ast.minute||'?'}'`;
+    return`<div class="pmr-xi-row"><div class="pmr-xi-pb">${_tesc(posLabels[i]||'')}</div><div class="pmr-xi-nm">${_tesc(name)}</div>${ev?`<div class="pmr-xi-ev">${_tesc(ev.trim())}</div>`:''}</div>`;
+  }).join('');
+
+  // Scorers
+  const scorerLines=(document.getElementById('pmr-h1').value?[]:[]); // from goals
+  const scorersHtml=(m.goals||[]).map(g=>`<div class="pmr-scorer">⚽ ${_tesc(g.player)} ${g.minute?g.minute+"'":''}${g.assist?' ('+_tesc(g.assist)+')':''}</div>`).join('');
+  const milestone=document.getElementById('pmr-milestone').value;
+  const milestoneHtml=milestone?`<div class="pmr-mile">★ ${_tesc(milestone)}</div>`:'';
+
+  // Halves
+  const h1=(document.getElementById('pmr-h1').value||'').split('\n').filter(l=>l.trim()).map(l=>`<li>${_tesc(l)}</li>`).join('');
+  const h2=(document.getElementById('pmr-h2').value||'').split('\n').filter(l=>l.trim()).map(l=>`<li>${_tesc(l)}</li>`).join('');
+
+  // Stats footer
+  let sfooter=document.getElementById('pmr-footer').value;
+  if(!sfooter)sfooter=`${shots} shots | ${sot} on target | ${crosses} crosses | ${corners} corners | Shot acc. ${shotAcc}% | Conversion rate ${convRate}% | Big chance conv. ${bcConv}%`;
+
+  // Events (auto from match data)
+  const evItems=[];
+  (m.goals||[]).forEach(g=>evItems.push({min:g.minute||0,type:'goal',label:'GOAL',desc:`${g.player}${g.assist?' (ast: '+g.assist+')':''}. ${gf>ga?'Leading '+gf+'–'+ga:''}`}));
+  const subGroups={};
+  (m.subs||[]).forEach(s=>{const k=s.minute||'?';(subGroups[k]=subGroups[k]||[]).push(s);});
+  Object.entries(subGroups).forEach(([min,ss])=>evItems.push({min:+min||90,type:'sub',label:'SUBSTITUTION',desc:ss.map(s=>`${s.off||'?'} → ${s.on||'?'}`).join(' / ')}));
+  (m.redCards||[]).forEach(r=>evItems.push({min:r.minute||0,type:'red',label:'RED CARD',desc:`${r.player} dismissed`}));
+  evItems.sort((a,b)=>(+a.min||0)-(+b.min||0));
+  const evHtml=evItems.map(ev=>{
+    const hl=ev.type==='goal'||ev.type==='red';
+    return`<div class="pmr-ev"><div class="pmr-ev-min">${ev.min}'</div><div class="pmr-ev-dot ${ev.type}"></div><div class="pmr-ev-c ${hl?'pmr-ev-hl':''}"><div class="pmr-ev-type">${ev.type==='goal'?'⚽ ':ev.type==='red'?'🟥 ':''}${_tesc(ev.label)}</div><div class="pmr-ev-desc">${_tesc(ev.desc)}</div></div></div>`;
+  }).join('');
+
+  // Subs table
+  const subRows=document.querySelectorAll('.pmr-s-min');
+  let subsHtml='';
+  document.querySelectorAll('#pmr-subs-wrap > div').forEach(row=>{
+    const min=row.querySelector('.pmr-s-min')?.value||'';
+    const off=row.querySelector('.pmr-s-off')?.value||'';
+    const on=row.querySelector('.pmr-s-on')?.value||'';
+    const sh=row.querySelector('.pmr-s-sh')?.value||'';
+    const im=row.querySelector('.pmr-s-im')?.value||'';
+    subsHtml+=`<tr><td>${_tesc(min)}</td><td class="pmr-poff">${_tesc(off)}</td><td class="pmr-pon">${_tesc(on)}</td><td><strong>${_tesc(sh)}</strong></td><td>${_tesc(im)}</td></tr>`;
+  });
+  const subNote=document.getElementById('pmr-sub-note').value;
+
+  // Analysis
+  const hlTitle=document.getElementById('pmr-hl-title').value||'PERFORMANCE ANALYSIS';
+  const hlDesc=document.getElementById('pmr-hl-desc').value;
+  const pos=(document.getElementById('pmr-pos').value||'').split('\n').filter(l=>l.trim()).map(l=>`<li>${_tesc(l)}</li>`).join('');
+  const neg=(document.getElementById('pmr-neg').value||'').split('\n').filter(l=>l.trim()).map(l=>`<li>${_tesc(l)}</li>`).join('');
+
+  // Recs
+  const rts=[...document.querySelectorAll('.pmr-rec-t')].map(e=>e.value);
+  const rbs=[...document.querySelectorAll('.pmr-rec-b')].map(e=>e.value);
+
+  const analyst=localStorage.getItem(TK('analyst_name'))||'VALENTINE TAPIWA KADONZVO';
+  const role='Performance & Tactical Analyst';
+
+  const slides=[
+// SLIDE 1: COVER
+`<div class="pmr-slide"><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px">${logoCoverHtml}<div class="pmr-ctitle">POST-MATCH REPORT</div><div class="pmr-copp">${_tesc(opp)}</div><div class="pmr-cmeta">${_tesc(dateStr)}<br>${_tesc(venue)}</div></div><div class="pmr-foot"></div></div>`,
+
+// SLIDE 2: STARTING XI
+`<div class="pmr-slide"><div class="pmr-sh"><div class="pmr-st">STARTING XI | ${_tesc(formation)}</div>${logoHtml}</div><div class="pmr-gold"></div><div class="pmr-body"><div class="pmr-xi-lay"><div class="pmr-xi-list"><div class="pmr-xi-club">KWEKWE UNITED FC</div><div class="pmr-xi-gl"></div>${xiHtml}</div><div class="pmr-pitch">${pmrBuildPitch(formation,xi)}</div></div></div></div>`,
+
+// SLIDE 3: MATCH SUMMARY
+`<div class="pmr-slide"><div class="pmr-sh"><div class="pmr-st">MATCH SUMMARY | ${_tesc(opp.toUpperCase())}</div>${logoHtml}</div><div class="pmr-gold"></div><div class="pmr-body"><div class="pmr-sum-lay"><div class="pmr-sum-l"><div class="pmr-res"><div class="pmr-res-lbl" style="color:${resultColor}">${result}</div><div class="pmr-res-sc"><span style="color:white">${gf}</span><span style="color:#555;margin:0 8px">–</span><span style="color:#555">${ga}</span></div><div class="pmr-res-vs">Kwekwe United vs ${_tesc(opp)}</div></div><div style="display:flex;flex-direction:column;gap:5px">${scorersHtml}${milestoneHtml}</div></div><div class="pmr-sum-r"><div class="pmr-half"><div class="pmr-half-t">FIRST HALF</div><div class="pmr-half-d"></div><ul class="pmr-half-ul">${h1}</ul></div><div class="pmr-half"><div class="pmr-half-t">SECOND HALF</div><div class="pmr-half-d"></div><ul class="pmr-half-ul">${h2}</ul></div></div></div></div></div>`,
+
+// SLIDE 4: MATCH STATISTICS
+`<div class="pmr-slide" style="position:relative"><div class="pmr-sh"><div class="pmr-st">MATCH STATISTICS</div>${logoHtml}</div><div class="pmr-gold"></div><div class="pmr-body" style="padding-bottom:40px"><div class="pmr-sg">
+<div class="pmr-sc g"><div class="pmr-sl">Goals Scored</div><div class="pmr-sv">${gf}</div></div>
+<div class="pmr-sc p"><div class="pmr-sl">Total Shots</div><div class="pmr-sv">${shots}</div></div>
+<div class="pmr-sc p"><div class="pmr-sl">On Target</div><div class="pmr-sv">${sot}</div></div>
+<div class="pmr-sc g"><div class="pmr-sl">Goals Conceded</div><div class="pmr-sv">${ga}</div>${ga===0?'<div class="pmr-sn">Clean sheet ✓</div>':''}</div>
+<div class="pmr-sc p"><div class="pmr-sl">Goals Scored</div><div class="pmr-sv">${gf}</div><div class="pmr-sn">${(m.goals||[]).map(g=>_tesc(g.player+' '+(g.minute||'?')+"'")).join(' / ')}</div></div>
+<div class="pmr-sc o"><div class="pmr-sl">Big Chances</div><div class="pmr-sv">${bc}</div></div>
+<div class="pmr-sc p"><div class="pmr-sl">Crosses</div><div class="pmr-sv">${crosses}</div></div>
+${rc>0?`<div class="pmr-sc r"><div class="pmr-sl">Red Card</div><div class="pmr-sv">${rc}</div></div>`:`<div class="pmr-sc p"><div class="pmr-sl">Red Cards</div><div class="pmr-sv">${rc}</div></div>`}
+<div class="pmr-sc n"><div class="pmr-sl">Shot Accuracy</div><div class="pmr-sv">${shotAcc}%</div></div>
+<div class="pmr-sc o"><div class="pmr-sl">Conv. Rate</div><div class="pmr-sv">${convRate}%</div></div>
+<div class="pmr-sc g"><div class="pmr-sl">Big Chance %</div><div class="pmr-sv">${bcConv}%</div></div>
+<div class="pmr-sc p"><div class="pmr-sl">Corners</div><div class="pmr-sv">${corners}</div></div>
+</div></div><div class="pmr-sfooter">${_tesc(sfooter)}</div></div>`,
+
+// SLIDE 5: KEY EVENTS
+`<div class="pmr-slide"><div class="pmr-sh"><div class="pmr-st">KEY MATCH EVENTS</div>${logoHtml}</div><div class="pmr-gold"></div><div class="pmr-body"><div class="pmr-tl"><div class="pmr-tl-line"></div>${evHtml}</div></div></div>`,
+
+// SLIDE 6: SUBSTITUTIONS
+`<div class="pmr-slide"><div class="pmr-sh"><div class="pmr-st">SUBSTITUTIONS</div>${logoHtml}</div><div class="pmr-gold"></div><div class="pmr-body"><div class="pmr-st-wrap"><table class="pmr-st-tbl"><thead><tr><th>Time</th><th>Player Off ↓</th><th>Player On ↑</th><th>Positional Shift</th><th>Impact</th></tr></thead><tbody>${subsHtml}</tbody></table>${subNote?`<div class="pmr-snote">⚠ ${_tesc(subNote)}</div>`:''}</div></div></div>`,
+
+// SLIDE 7: PERFORMANCE ANALYSIS
+`<div class="pmr-slide"><div class="pmr-sh"><div class="pmr-st">PERFORMANCE ANALYSIS</div>${logoHtml}</div><div class="pmr-gold"></div><div class="pmr-body" style="display:flex;flex-direction:column;gap:.6vw"><div class="pmr-ahl"><div class="pmr-ahl-t">${_tesc(hlTitle)}</div><div class="pmr-ahl-d">${_tesc(hlDesc)}</div></div><div class="pmr-acols"><div class="pmr-acol pos"><div class="pmr-acol-t">✓ POSITIVES</div><ul class="pmr-aul">${pos}</ul></div><div class="pmr-acol neg"><div class="pmr-acol-t">AREAS TO IMPROVE</div><ul class="pmr-aul">${neg}</ul></div></div></div></div>`,
+
+// SLIDE 8: RECOMMENDATIONS
+`<div class="pmr-slide"><div class="pmr-sh"><div class="pmr-st">RECOMMENDATIONS</div>${logoHtml}</div><div class="pmr-gold"></div><div class="pmr-body"><div class="pmr-rg">${[0,1,2].map(i=>`<div class="pmr-rb"><div class="pmr-rb-h r${i+1}">0${i+1} ${_tesc(rts[i]||'')}</div><div class="pmr-rb-b">${_tesc(rbs[i]||'')}</div></div>`).join('')}</div></div></div>`,
+
+// SLIDE 9: ANALYST CREDIT
+`<div class="pmr-slide"><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8vw">${logoAnHtml}<div class="pmr-an-name">${_tesc(analyst)}</div><div class="pmr-an-role">${_tesc(role)}</div></div><div class="pmr-foot"></div></div>`
+  ];
+
+  const sep=(n)=>`<div class="pmr-slide-sep no-print" data-label="SLIDE ${n}"></div>`;
+  const slidesWithSep=slides.map((s,i)=>s+(i<slides.length-1?sep(i+2):'')).join('');
+  document.getElementById('pmr-slides-inner').innerHTML=
+    `<div class="pmr-edit-hint no-print">✏️ Click any text on the slides to edit it directly. Drag player dots to reposition them.</div>`
+    +slidesWithSep;
+  pmrInitPitch();
+  pmrInitEditable();
+  pmrInitMobile();
+  document.querySelectorAll('.pmr-form-section').forEach(el=>el.style.display='none');
+  document.getElementById('pmr-ai-fields').style.display='none';
+  document.getElementById('pmr-slides').style.display='block';
+  window.scrollTo(0,0);
+}
+
+function pmrPosLabels(formation,count){
+  const map={'4-3-3':['GK','RB','CB','CB','LB','DM','CM','CM','RW','AM','LW'],'4-2-3-1':['GK','RB','CB','CB','LB','DM','DM','RAM','CAM','LAM','ST'],'4-4-2':['GK','RB','CB','CB','LB','RM','CM','CM','LM','ST','ST'],'3-5-2':['GK','CB','CB','CB','RM','CM','CM','CM','LM','ST','ST'],'3-4-3':['GK','CB','CB','CB','RM','CM','CM','LM','RW','ST','LW']};
+  return (map[formation]||[]).slice(0,count);
+}
+
+function pmrBackToForm(){
+  // Restore all slides (in case mobile hid them)
+  document.querySelectorAll('#pmr-slides-inner .pmr-slide').forEach(s=>s.style.display='');
+  document.getElementById('pmr-mob-ctrl').style.display='none';
+  pmrSlideEls=[];
+  document.querySelectorAll('.pmr-form-section').forEach(el=>el.style.display='');
+  document.getElementById('pmr-ai-fields').style.display='block';
+  document.getElementById('pmr-slides').style.display='none';
+}
+
+function pmrSetDotColor(color){
+  pmrDotCol=color;
+  const tc=color==='#ffffff'?'#0c1e4a':'#ffffff';
+  const bc=color==='#ffffff'?'#0c1e4a':'#ffffff';
+  document.querySelectorAll('.pmr-ptok-c').forEach(el=>{
+    el.style.background=color;el.style.borderColor=bc;el.style.color=tc;
+  });
+  document.querySelectorAll('.pmr-pc-b').forEach(b=>{
+    const oc=b.getAttribute('onclick')||'';
+    b.classList.toggle('pmr-active',oc.includes("'"+color+"'"));
+  });
+}
+
+function pmrInitPitch(){
+  const wrap=document.getElementById('pmr-pf');
+  if(!wrap)return;
+  let active=null,ox=0,oy=0;
+  wrap.querySelectorAll('.pmr-ptok').forEach(tok=>{
+    tok.addEventListener('pointerdown',e=>{
+      if(e.button!==0)return;
+      e.preventDefault();e.stopPropagation();
+      active=tok;tok.classList.add('pmr-dragging');
+      tok.setPointerCapture(e.pointerId);
+      const r=tok.getBoundingClientRect();
+      ox=e.clientX-(r.left+r.width/2);oy=e.clientY-(r.top+r.height/2);
+    });
+    tok.addEventListener('pointermove',e=>{
+      if(active!==tok)return;
+      const wr=wrap.getBoundingClientRect();
+      let x=(e.clientX-ox-wr.left)/wr.width*100;
+      let y=(e.clientY-oy-wr.top)/wr.height*100;
+      x=Math.max(3,Math.min(97,x));y=Math.max(3,Math.min(97,y));
+      tok.style.left=x+'%';tok.style.top=y+'%';
+    });
+    tok.addEventListener('pointerup',()=>{if(active===tok){tok.classList.remove('pmr-dragging');active=null;}});
+    tok.addEventListener('pointercancel',()=>{if(active===tok){tok.classList.remove('pmr-dragging');active=null;}});
+  });
+}
+
+let pmrCurSlide=0, pmrSlideEls=[];
+
+function pmrInitMobile(){
+  const isMobile=window.innerWidth<=768;
+  const nav=document.getElementById('pmr-mob-ctrl');
+  pmrSlideEls=[...document.querySelectorAll('#pmr-slides-inner .pmr-slide')];
+  if(!isMobile||!pmrSlideEls.length){nav.style.display='none';return;}
+  pmrCurSlide=0;
+  pmrSlideEls.forEach((s,i)=>{s.style.display=i===0?'flex':'none';});
+  document.querySelectorAll('.pmr-slide-sep').forEach(s=>s.style.display='none');
+  pmrRenderMobNav();
+  nav.style.display='flex';
+  // swipe support
+  const inner=document.getElementById('pmr-slides-inner');
+  let tx=0;
+  inner.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;},{passive:true});
+  inner.addEventListener('touchend',e=>{
+    const dx=e.changedTouches[0].clientX-tx;
+    if(dx<-40)pmrNextSlide();else if(dx>40)pmrPrevSlide();
+  },{passive:true});
+}
+
+function pmrRenderMobNav(){
+  const nav=document.getElementById('pmr-mob-ctrl');
+  const n=pmrSlideEls.length;
+  const dots=pmrSlideEls.map((_,i)=>`<div class="pmr-mob-dot${i===pmrCurSlide?' pmr-dot-on':''}" onclick="pmrGoToSlide(${i})"></div>`).join('');
+  nav.innerHTML=`
+    <button class="pmr-mob-btn" onclick="pmrPrevSlide()" ${pmrCurSlide===0?'disabled':''}>‹</button>
+    <div class="pmr-mob-center">
+      <div class="pmr-mob-dots">${dots}</div>
+      <div class="pmr-mob-pg">Slide ${pmrCurSlide+1} / ${n}</div>
+    </div>
+    <button class="pmr-mob-btn" onclick="pmrNextSlide()" ${pmrCurSlide===n-1?'disabled':''}>›</button>`;
+}
+
+function pmrGoToSlide(n){
+  if(!pmrSlideEls.length)return;
+  pmrSlideEls[pmrCurSlide].style.display='none';
+  pmrCurSlide=Math.max(0,Math.min(n,pmrSlideEls.length-1));
+  pmrSlideEls[pmrCurSlide].style.display='flex';
+  pmrRenderMobNav();
+  const top=document.getElementById('pmr-slides').getBoundingClientRect().top+window.scrollY-60;
+  window.scrollTo({top,behavior:'smooth'});
+}
+
+function pmrNextSlide(){pmrGoToSlide(pmrCurSlide+1);}
+function pmrPrevSlide(){pmrGoToSlide(pmrCurSlide-1);}
+
+function pmrInitEditable(){
+  const sel=[
+    '.pmr-ctitle','.pmr-copp','.pmr-cmeta',
+    '.pmr-st','.pmr-half-t','.pmr-half-ul li',
+    '.pmr-ev-type','.pmr-ev-desc',
+    '.pmr-ahl-t','.pmr-ahl-d',
+    '.pmr-aul li',
+    '.pmr-rb-h','.pmr-rb-b',
+    '.pmr-an-name','.pmr-an-role',
+    '.pmr-scorer','.pmr-mile',
+    '.pmr-snote','.pmr-st-tbl td','.pmr-sfooter',
+    '.pmr-res-lbl','.pmr-sv','.pmr-sl',
+  ].join(',');
+  document.querySelectorAll(sel).forEach(el=>{
+    el.contentEditable='true';el.spellcheck=false;el.style.outline='none';
+  });
 }
 
 </script>
